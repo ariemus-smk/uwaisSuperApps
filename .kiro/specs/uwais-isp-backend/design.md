@@ -12,8 +12,8 @@ The backend serves three client applications:
 ### Key Design Decisions
 
 1. **Monolithic architecture** — Single Express.js application with modular folder structure. Chosen for simplicity of deployment and operational overhead appropriate for a regional ISP.
-2. **MySQL as primary datastore** — Relational model fits the highly structured business data (customers, invoices, assets). FreeRADIUS natively supports MySQL for `radcheck`/`radreply`/`radacct` tables.
-3. **FreeRADIUS for AAA** — Industry-standard RADIUS server handling PPPoE authentication, accounting, and CoA/POD relay.
+2. **Dual MySQL databases** — Two separate MySQL databases: (a) Application DB for all business data (customers, invoices, assets, tickets, etc.) and (b) RADIUS DB for FreeRADIUS tables (`radcheck`, `radreply`, `radacct`, `radusergroup`, `nas`). This separation keeps FreeRADIUS operating independently and allows the RADIUS DB to be tuned/scaled separately from the application DB.
+3. **FreeRADIUS for AAA** — Industry-standard RADIUS server handling PPPoE authentication, accounting, and CoA/POD relay. FreeRADIUS connects exclusively to the RADIUS DB.
 4. **Job scheduler (node-cron)** — In-process scheduled jobs for billing generation, auto-isolir, FUP enforcement, KPI calculation, and NAS health polling.
 5. **JWT + RBAC** — Stateless authentication with role-based middleware for 8 distinct user roles.
 6. **Queue-based notifications** — WhatsApp messages processed via a background queue with retry logic.
@@ -39,8 +39,12 @@ graph TB
         NotifQueue[Notification Queue<br/>WhatsApp Worker]
     end
 
-    subgraph "Data Layer"
-        MySQL[(MySQL Database)]
+    subgraph "Application Database"
+        AppDB[(MySQL - App DB<br/>customers, invoices, assets,<br/>tickets, users, etc.)]
+    end
+
+    subgraph "RADIUS Database"
+        RadiusDB[(MySQL - RADIUS DB<br/>radcheck, radreply, radacct,<br/>radusergroup, nas)]
         FreeRADIUS[FreeRADIUS Server]
     end
 
@@ -57,14 +61,15 @@ graph TB
 
     API --> Auth
     Auth --> Services
-    Services --> MySQL
+    Services --> AppDB
+    Services -->|RADIUS writes| RadiusDB
     Services --> CoAEngine
     Services --> NotifQueue
     Scheduler --> Services
 
     CoAEngine -->|UDP 3799| NAS
     FreeRADIUS -->|RADIUS Auth/Acct| NAS
-    FreeRADIUS --> MySQL
+    FreeRADIUS --> RadiusDB
 
     Services -->|REST| Tripay
     Services -->|TR-069/REST| ACS
@@ -83,7 +88,8 @@ sequenceDiagram
     participant RBAC as RBAC Middleware
     participant Controller
     participant Service
-    participant DB as MySQL
+    participant AppDB as App DB (MySQL)
+    participant RadDB as RADIUS DB (MySQL)
     participant External as External Service
 
     Client->>Router: HTTP Request + JWT
@@ -91,8 +97,10 @@ sequenceDiagram
     AuthMW->>RBAC: Check Role Permissions
     RBAC->>Controller: Authorized Request
     Controller->>Service: Business Logic Call
-    Service->>DB: Query/Mutation
-    DB-->>Service: Result
+    Service->>AppDB: Query/Mutation (App DB)
+    AppDB-->>Service: Result
+    Service->>RadDB: (If RADIUS op) Write to RADIUS DB
+    RadDB-->>Service: Result
     Service->>External: (Optional) CoA/Tripay/ACS/WA
     External-->>Service: Response
     Service-->>Controller: Result
@@ -108,8 +116,8 @@ src/
 ├── app.js                    # Express app setup, middleware registration
 ├── server.js                 # HTTP server entry point
 ├── config/
-│   ├── database.js           # MySQL connection pool (mysql2)
-│   ├── radius.js             # FreeRADIUS DB config
+│   ├── database.js           # Dual MySQL connection pools (App DB + RADIUS DB)
+│   ├── radius.js             # FreeRADIUS RADIUS protocol config (CoA secrets, ports)
 │   ├── tripay.js             # Tripay API credentials
 │   ├── whatsapp.js           # WhatsApp gateway config
 │   ├── acs.js                # ACS/TR-069 config
@@ -204,7 +212,7 @@ src/
 │   ├── fupEnforcement.job.js
 │   └── notificationBroadcast.job.js
 ├── models/
-│   ├── index.js              # Model registry
+│   ├── index.js              # Model registry (App DB models)
 │   ├── customer.model.js
 │   ├── subscription.model.js
 │   ├── package.model.js
@@ -231,6 +239,15 @@ src/
 │   ├── fupUsage.model.js
 │   ├── jobLog.model.js
 │   └── auditLog.model.js
+├── radiusModels/
+│   ├── index.js              # RADIUS DB model registry
+│   ├── radcheck.model.js     # PPPoE credentials
+│   ├── radreply.model.js     # Per-user reply attributes
+│   ├── radgroupcheck.model.js
+│   ├── radgroupreply.model.js
+│   ├── radusergroup.model.js # User-to-group mapping
+│   ├── radacct.model.js      # Accounting records
+│   └── nas.model.js          # NAS registry for FreeRADIUS
 ├── utils/
 │   ├── pppoeGenerator.js     # PPPoE username/password generation
 │   ├── snGenerator.js        # Serial number auto-generation
@@ -453,7 +470,9 @@ src/
 
 ## Data Models
 
-### Entity Relationship Diagram (MySQL)
+### Entity Relationship Diagram (Application Database - MySQL)
+
+All business tables reside in the Application Database (`uwais_app`). The RADIUS Database is separate and contains only FreeRADIUS standard tables (see [FreeRADIUS Tables](#freeradius-tables-separate-radius-database) section below).
 
 ```mermaid
 erDiagram
@@ -923,9 +942,9 @@ erDiagram
     users ||--o{ saldo_transactions : "owns"
 ```
 
-### FreeRADIUS Tables (Standard Schema)
+### FreeRADIUS Tables (Separate RADIUS Database)
 
-The backend writes to standard FreeRADIUS MySQL tables:
+The backend connects to a **separate MySQL database** dedicated to FreeRADIUS. This RADIUS DB contains the standard FreeRADIUS schema tables. FreeRADIUS reads from this database for authentication and writes accounting records to it. The backend application writes to this database when provisioning or modifying customer RADIUS profiles.
 
 | Table | Purpose |
 |-------|---------|
@@ -937,11 +956,45 @@ The backend writes to standard FreeRADIUS MySQL tables:
 | `radacct` | Accounting records (session start/stop, bytes in/out for FUP) |
 | `nas` | NAS device registry for FreeRADIUS |
 
-The backend manages these tables directly via SQL when:
+**Database Connection Configuration** (`config/database.js`):
+
+```javascript
+// config/database.js
+const mysql = require('mysql2/promise');
+
+// Application Database - all business tables
+const appPool = mysql.createPool({
+  host: process.env.APP_DB_HOST,
+  port: process.env.APP_DB_PORT || 3306,
+  user: process.env.APP_DB_USER,
+  password: process.env.APP_DB_PASSWORD,
+  database: process.env.APP_DB_NAME, // e.g., 'uwais_app'
+  waitForConnections: true,
+  connectionLimit: 20,
+  queueLimit: 0,
+});
+
+// RADIUS Database - FreeRADIUS tables only
+const radiusPool = mysql.createPool({
+  host: process.env.RADIUS_DB_HOST,
+  port: process.env.RADIUS_DB_PORT || 3306,
+  user: process.env.RADIUS_DB_USER,
+  password: process.env.RADIUS_DB_PASSWORD,
+  database: process.env.RADIUS_DB_NAME, // e.g., 'radius'
+  waitForConnections: true,
+  connectionLimit: 10,
+  queueLimit: 0,
+});
+
+module.exports = { appPool, radiusPool };
+```
+
+The backend manages the RADIUS DB tables directly via SQL (using `radiusPool`) when:
 - A subscription is created → insert into `radcheck` + `radusergroup`
 - A package change occurs → update `radusergroup`
 - Isolir is applied → update `radreply` to apply isolir profile
 - FUP is triggered → update `radreply` with reduced speed attributes
+- A NAS is registered → insert into `nas` table in RADIUS DB
 
 ## Integration Architecture
 
@@ -951,25 +1004,32 @@ The backend manages these tables directly via SQL when:
 sequenceDiagram
     participant NAS as NAS/Mikrotik
     participant FR as FreeRADIUS
-    participant DB as MySQL (rad* tables)
+    participant RadDB as MySQL (RADIUS DB)
     participant Backend as Express Backend
+    participant AppDB as MySQL (App DB)
 
-    Note over Backend,DB: Backend writes auth/profile data
-    Backend->>DB: INSERT radcheck (PPPoE creds)
-    Backend->>DB: INSERT radusergroup (package mapping)
-    Backend->>DB: INSERT/UPDATE radreply (speed attributes)
+    Note over Backend,RadDB: Backend writes auth/profile data to RADIUS DB
+    Backend->>RadDB: INSERT radcheck (PPPoE creds)
+    Backend->>RadDB: INSERT radusergroup (package mapping)
+    Backend->>RadDB: INSERT/UPDATE radreply (speed attributes)
+    Backend->>AppDB: UPDATE subscription status in App DB
 
     Note over NAS,FR: Customer connects
     NAS->>FR: Access-Request (PPPoE login)
-    FR->>DB: SELECT radcheck WHERE username=?
-    DB-->>FR: Credentials
-    FR->>DB: SELECT radreply + radgroupreply
-    DB-->>FR: Rate-Limit attributes
+    FR->>RadDB: SELECT radcheck WHERE username=?
+    RadDB-->>FR: Credentials
+    FR->>RadDB: SELECT radreply + radgroupreply
+    RadDB-->>FR: Rate-Limit attributes
     FR-->>NAS: Access-Accept + attributes
 
     Note over NAS,FR: Session accounting
     NAS->>FR: Accounting-Request (Start/Interim/Stop)
-    FR->>DB: INSERT/UPDATE radacct
+    FR->>RadDB: INSERT/UPDATE radacct
+
+    Note over Backend,RadDB: Backend reads accounting for FUP
+    Backend->>RadDB: SELECT radacct (bytes usage)
+    RadDB-->>Backend: Usage data
+    Backend->>AppDB: UPDATE fup_usage in App DB
 ```
 
 ### Tripay Payment Gateway Integration
@@ -979,26 +1039,29 @@ sequenceDiagram
     participant Client
     participant Backend
     participant Tripay
-    participant DB as MySQL
+    participant AppDB as App DB (MySQL)
+    participant RadDB as RADIUS DB (MySQL)
 
     Client->>Backend: POST /payments/tripay/create {invoice_id, method}
-    Backend->>DB: Validate invoice exists & UNPAID
+    Backend->>AppDB: Validate invoice exists & UNPAID
     Backend->>Tripay: POST /transaction/create
     Tripay-->>Backend: {reference, pay_code, pay_url, expired_time}
-    Backend->>DB: INSERT payment (status=Pending)
+    Backend->>AppDB: INSERT payment (status=Pending)
     Backend-->>Client: Payment instructions
 
     Note over Tripay,Backend: Customer pays externally
     Tripay->>Backend: POST /payments/tripay/callback {signature, reference, status}
     Backend->>Backend: Verify HMAC signature
-    Backend->>DB: UPDATE invoice status=LUNAS
-    Backend->>DB: UPDATE payment status=Success
+    Backend->>AppDB: UPDATE invoice status=LUNAS
+    Backend->>AppDB: UPDATE payment status=Success
     
     alt Customer was Isolir
-        Backend->>Backend: Trigger CoA unisolir
+        Backend->>RadDB: UPDATE radreply (remove isolir profile)
+        Backend->>Backend: Trigger CoA unisolir to NAS
+        Backend->>AppDB: UPDATE customer status=Aktif
     end
     
-    Backend->>DB: Queue WhatsApp confirmation
+    Backend->>AppDB: Queue WhatsApp confirmation
     Backend-->>Tripay: 200 OK
 ```
 
@@ -1051,29 +1114,31 @@ sequenceDiagram
 sequenceDiagram
     participant Trigger as Trigger (Admin/Scheduler/Payment)
     participant CoA as CoA Engine
-    participant DB as MySQL
+    participant AppDB as App DB (MySQL)
+    participant RadDB as RADIUS DB (MySQL)
     participant NAS as NAS/Mikrotik (UDP 3799)
 
     Trigger->>CoA: sendCoA({nasId, username, attributes})
-    CoA->>DB: Lookup NAS IP + RADIUS secret
+    CoA->>AppDB: Lookup NAS IP + RADIUS secret (nas_devices table)
+    CoA->>RadDB: UPDATE radreply (if speed/isolir change)
     CoA->>CoA: Build RADIUS CoA-Request packet
     CoA->>NAS: UDP packet to port 3799
     
     alt CoA-ACK
         NAS-->>CoA: CoA-ACK
-        CoA->>DB: INSERT coa_log (status=ACK)
+        CoA->>AppDB: INSERT coa_log (status=ACK)
         CoA-->>Trigger: Success
     else CoA-NAK
         NAS-->>CoA: CoA-NAK
-        CoA->>DB: INSERT coa_log (status=NAK, retry_count++)
+        CoA->>AppDB: INSERT coa_log (status=NAK, retry_count++)
         alt retry_count < 3
             CoA->>NAS: Retry with exponential backoff
         else max retries reached
-            CoA->>DB: Log failure for manual review
+            CoA->>AppDB: Log failure for manual review
             CoA-->>Trigger: Failed after retries
         end
     else Timeout
-        CoA->>DB: INSERT coa_log (status=Timeout)
+        CoA->>AppDB: INSERT coa_log (status=Timeout)
         CoA->>NAS: Retry
     end
 ```
@@ -1351,7 +1416,8 @@ All API errors follow a consistent JSON structure:
 
 ### Transaction Safety
 
-- All billing operations (invoice generation, payment processing, saldo deduction) use MySQL transactions with `SERIALIZABLE` isolation for saldo operations
+- All billing operations (invoice generation, payment processing, saldo deduction) use MySQL transactions on the App DB with `SERIALIZABLE` isolation for saldo operations
+- RADIUS write operations (radcheck, radreply, radusergroup) are performed on the RADIUS DB connection pool. When a business operation requires both App DB and RADIUS DB writes (e.g., subscription activation), the App DB transaction is committed first, then the RADIUS DB write is performed. If the RADIUS write fails, a compensating action is logged for manual review.
 - CoA operations are idempotent — sending the same CoA twice produces the same result
 - Payment callbacks from Tripay are idempotent — duplicate callbacks for the same reference are ignored
 
