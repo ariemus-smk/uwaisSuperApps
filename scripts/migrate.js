@@ -34,12 +34,24 @@ function getPoolForMigration(filename) {
 /**
  * Split SQL file content into individual statements.
  * Handles multi-line statements separated by semicolons.
+ * Strips comment-only lines before evaluating if a statement has real SQL.
  */
 function splitStatements(sql) {
   return sql
     .split(';')
     .map(stmt => stmt.trim())
-    .filter(stmt => stmt.length > 0 && !stmt.startsWith('--'));
+    .filter(stmt => {
+      // Remove all comment-only lines and blank lines to check if there's real SQL
+      const withoutComments = stmt
+        .split('\n')
+        .filter(line => {
+          const trimmed = line.trim();
+          return trimmed.length > 0 && !trimmed.startsWith('--');
+        })
+        .join('\n')
+        .trim();
+      return withoutComments.length > 0;
+    });
 }
 
 /**
@@ -61,7 +73,12 @@ async function runMigration(filename) {
       executed++;
     } catch (err) {
       // Skip "already exists" errors for idempotent migrations
-      if (err.code === 'ER_TABLE_EXISTS_ERROR' || err.code === 'ER_DUP_FIELDNAME') {
+      if (
+        err.code === 'ER_TABLE_EXISTS_ERROR' ||
+        err.code === 'ER_DUP_FIELDNAME' ||
+        err.code === 'ER_FK_DUP_NAME' ||
+        err.code === 'ER_DUP_KEYNAME'
+      ) {
         console.log(`  [SKIP] ${err.message}`);
       } else {
         throw new Error(`Failed executing statement in ${filename}: ${err.message}\nStatement: ${statement.substring(0, 100)}...`);

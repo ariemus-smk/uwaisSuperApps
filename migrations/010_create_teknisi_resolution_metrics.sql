@@ -22,6 +22,6 @@ CREATE TABLE IF NOT EXISTS `teknisi_resolution_metrics` (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- Add resolution_category column to tickets table if not exists
--- (resolution_type already exists, resolution_category is stored separately for closure tracking)
+-- Note: ER_DUP_FIELDNAME error is automatically skipped by the migration runner
 ALTER TABLE `tickets`
-  ADD COLUMN IF NOT EXISTS `resolution_category` VARCHAR(50) NULL COMMENT 'Category recorded at closure: RemoteFix, FieldFix, etc.' AFTER `damage_classification`;
+  ADD COLUMN `resolution_category` VARCHAR(50) NULL COMMENT 'Category recorded at closure: RemoteFix, FieldFix, etc.' AFTER `damage_classification`;
