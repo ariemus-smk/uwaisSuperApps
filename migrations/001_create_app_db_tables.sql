@@ -664,7 +664,7 @@ CREATE TABLE IF NOT EXISTS `job_logs` (
   `end_time` TIMESTAMP NULL,
   `records_processed` INT NOT NULL DEFAULT 0,
   `records_failed` INT NOT NULL DEFAULT 0,
-  `status` ENUM('Success', 'Partial', 'Failed') NOT NULL DEFAULT 'Success',
+  `status` ENUM('Running', 'Success', 'Partial', 'Failed') NOT NULL DEFAULT 'Running',
   `error_details` TEXT NULL,
   PRIMARY KEY (`id`),
   INDEX `idx_job_logs_job_name` (`job_name`),

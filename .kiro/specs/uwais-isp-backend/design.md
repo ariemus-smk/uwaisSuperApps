@@ -35,7 +35,7 @@ graph TB
         Auth[Auth Middleware<br/>JWT + RBAC]
         Services[Service Layer<br/>Business Logic]
         Scheduler[Job Scheduler<br/>node-cron]
-        CoAEngine[CoA/POD Engine<br/>UDP Client]
+        CoAEngine[CoA/POD Engine<br/>SSH to FreeRADIUS + radclient]
         NotifQueue[Notification Queue<br/>WhatsApp Worker]
     end
 
@@ -52,7 +52,8 @@ graph TB
         Tripay[Tripay Payment Gateway]
         ACS[ACS Server<br/>TR-069]
         WhatsApp[WhatsApp API<br/>Gateway]
-        NAS[NAS/Mikrotik Routers<br/>via VPN]
+        CHR[Mikrotik CHR<br/>RouterOS 7 REST API<br/>VPN Concentrator]
+        NAS[NAS/Mikrotik Routers<br/>via VPN through CHR]
     end
 
     WebDash --> API
@@ -67,12 +68,15 @@ graph TB
     Services --> NotifQueue
     Scheduler --> Services
 
-    CoAEngine -->|UDP 3799| NAS
+    CoAEngine -->|SSH + radclient| FreeRADIUS
+    FreeRADIUS -->|CoA/POD UDP 3799| NAS
     FreeRADIUS -->|RADIUS Auth/Acct| NAS
     FreeRADIUS --> RadiusDB
 
     Services -->|REST| Tripay
     Services -->|TR-069/REST| ACS
+    Services -->|REST API (HTTPS)| CHR
+    CHR -->|VPN Tunnels| NAS
     NotifQueue -->|REST| WhatsApp
     Tripay -->|Callback| API
 end
@@ -336,6 +340,20 @@ src/
 | GET | `/api/nas/:id/script` | Superadmin | Download config script |
 | POST | `/api/nas/:id/test` | Superadmin | Test NAS connectivity |
 | GET | `/api/nas/monitoring` | Admin, Superadmin | NAS health status dashboard |
+
+#### VPN CHR Management (`/api/vpn-chr`)
+| Method | Endpoint | Roles | Description |
+|--------|----------|-------|-------------|
+| GET | `/api/vpn-chr/status` | Superadmin, Admin | Get CHR system status and resource usage |
+| GET | `/api/vpn-chr/secrets` | Superadmin, Admin | List all VPN secrets (PPTP/L2TP/SSTP/OVPN) |
+| POST | `/api/vpn-chr/secrets` | Superadmin | Create VPN secret on CHR |
+| DELETE | `/api/vpn-chr/secrets/:id` | Superadmin | Remove VPN secret from CHR |
+| GET | `/api/vpn-chr/active-connections` | Superadmin, Admin | List active VPN connections |
+| POST | `/api/vpn-chr/profiles` | Superadmin | Create/update PPP profile |
+| GET | `/api/vpn-chr/profiles` | Superadmin, Admin | List PPP profiles |
+| GET | `/api/vpn-chr/ip-pools` | Superadmin, Admin | List IP pools |
+| POST | `/api/vpn-chr/ip-pools` | Superadmin | Create IP pool |
+| POST | `/api/vpn-chr/disconnect/:id` | Superadmin, Admin | Disconnect active VPN session |
 
 #### CoA Engine (`/api/coa`)
 | Method | Endpoint | Roles | Description |

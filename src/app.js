@@ -3,26 +3,31 @@ const cors = require('cors');
 const helmet = require('helmet');
 const morgan = require('morgan');
 const { errorHandler, notFoundHandler } = require('./middleware/errorHandler');
+const routes = require('./routes');
 
 const app = express();
 
-// Security middleware
-app.use(helmet());
+// API prefix from environment
+const apiPrefix = process.env.API_PREFIX || '/api';
 
-// CORS
+// --- Global middleware (applied in correct order) ---
+
+// 1. CORS - handle cross-origin requests
 app.use(cors());
 
-// Request logging
+// 2. Security headers
+app.use(helmet());
+
+// 3. Request logging
 app.use(morgan('combined'));
 
-// Body parsing
+// 4. Body parsing (JSON + URL-encoded)
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
-// API prefix
-const apiPrefix = process.env.API_PREFIX || '/api';
+// --- Routes ---
 
-// Health check
+// Health check (no auth required)
 app.get(`${apiPrefix}/health`, (req, res) => {
   res.status(200).json({
     status: 'ok',
@@ -31,7 +36,7 @@ app.get(`${apiPrefix}/health`, (req, res) => {
   });
 });
 
-// Base route
+// Base route (no auth required)
 app.get('/', (req, res) => {
   res.status(200).json({
     name: 'UwaisSuperApps ISP Backend',
@@ -40,10 +45,16 @@ app.get('/', (req, res) => {
   });
 });
 
-// 404 handler
+// All API routes under the configured prefix
+// Auth, RBAC, and branchScope middleware are applied per-route inside each module
+app.use(apiPrefix, routes);
+
+// --- Error handling ---
+
+// 404 handler for unmatched routes
 app.use(notFoundHandler);
 
-// Global error handler
+// Global error handler (must be last)
 app.use(errorHandler);
 
 module.exports = app;
