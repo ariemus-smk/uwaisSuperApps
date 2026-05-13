@@ -23,8 +23,8 @@ const { appPool, closePools } = require('../src/config/database');
 const DEFAULT_BRANCH = {
   name: 'Pusat',
   address: 'Kantor Pusat UwaisSuperApps',
-  contact_phone: '081234567890',
-  contact_email: 'admin@uwaisapps.id',
+  contact_phone: '081256490707',
+  contact_email: 'admin@uwais.id',
   status: 'Active'
 };
 
