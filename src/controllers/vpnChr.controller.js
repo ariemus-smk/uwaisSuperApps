@@ -17,7 +17,10 @@ const mikrotikChrService = require('../services/mikrotikChr.service');
 async function getStatus(req, res) {
   try {
     const data = await mikrotikChrService.getSystemStatus();
-    return success(res, data, 'CHR status retrieved.');
+    const responseData = Array.isArray(data)
+      ? { ...data[0], configured_host: process.env.VPN_CHR_HOST || '192.168.79.1' }
+      : { ...data, configured_host: process.env.VPN_CHR_HOST || '192.168.79.1' };
+    return success(res, responseData, 'CHR status retrieved.');
   } catch (err) {
     const statusCode = err.statusCode || 500;
     const code = err.code || ERROR_CODE.INTERNAL_ERROR;
@@ -46,21 +49,24 @@ async function listSecrets(req, res) {
  */
 async function createSecret(req, res) {
   try {
-    const { name, password, service, profile } = req.body;
+    const { name, password, service, profile, remote_address } = req.body;
 
     let data;
     switch (service) {
+      case 'any':
+        data = await mikrotikChrService.createAnySecret({ name, password, profile, remote_address });
+        break;
       case 'pptp':
-        data = await mikrotikChrService.createPPTPSecret({ name, password, profile });
+        data = await mikrotikChrService.createPPTPSecret({ name, password, profile, remote_address });
         break;
       case 'l2tp':
-        data = await mikrotikChrService.createL2TPSecret({ name, password, profile });
+        data = await mikrotikChrService.createL2TPSecret({ name, password, profile, remote_address });
         break;
       case 'sstp':
-        data = await mikrotikChrService.createSSTPSecret({ name, password, profile });
+        data = await mikrotikChrService.createSSTPSecret({ name, password, profile, remote_address });
         break;
       case 'ovpn':
-        data = await mikrotikChrService.createOVPNSecret({ name, password, profile });
+        data = await mikrotikChrService.createOVPNSecret({ name, password, profile, remote_address });
         break;
       default:
         throw Object.assign(new Error(`Unsupported VPN service type: ${service}`), {

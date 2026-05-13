@@ -155,12 +155,16 @@ async function remove(resource, id) {
  * @returns {Promise<object>} Created secret
  */
 async function createPPTPSecret(data) {
-  return post('ppp/secret', {
+  const payload = {
     name: data.name,
     password: data.password,
     service: 'pptp',
     profile: data.profile || 'default',
-  });
+  };
+  if (data.remote_address) {
+    payload['remote-address'] = data.remote_address;
+  }
+  return post('ppp/secret', payload);
 }
 
 /**
@@ -172,12 +176,16 @@ async function createPPTPSecret(data) {
  * @returns {Promise<object>} Created secret
  */
 async function createL2TPSecret(data) {
-  return post('ppp/secret', {
+  const payload = {
     name: data.name,
     password: data.password,
     service: 'l2tp',
     profile: data.profile || 'default',
-  });
+  };
+  if (data.remote_address) {
+    payload['remote-address'] = data.remote_address;
+  }
+  return post('ppp/secret', payload);
 }
 
 /**
@@ -189,12 +197,16 @@ async function createL2TPSecret(data) {
  * @returns {Promise<object>} Created secret
  */
 async function createSSTPSecret(data) {
-  return post('ppp/secret', {
+  const payload = {
     name: data.name,
     password: data.password,
     service: 'sstp',
     profile: data.profile || 'default',
-  });
+  };
+  if (data.remote_address) {
+    payload['remote-address'] = data.remote_address;
+  }
+  return post('ppp/secret', payload);
 }
 
 /**
@@ -206,12 +218,37 @@ async function createSSTPSecret(data) {
  * @returns {Promise<object>} Created secret
  */
 async function createOVPNSecret(data) {
-  return post('ppp/secret', {
+  const payload = {
     name: data.name,
     password: data.password,
     service: 'ovpn',
     profile: data.profile || 'default',
-  });
+  };
+  if (data.remote_address) {
+    payload['remote-address'] = data.remote_address;
+  }
+  return post('ppp/secret', payload);
+}
+
+/**
+ * Create a generic VPN secret (any service) on CHR.
+ * @param {object} data - Secret data
+ * @param {string} data.name - Username
+ * @param {string} data.password - Password
+ * @param {string} [data.profile='default'] - PPP profile name
+ * @returns {Promise<object>} Created secret
+ */
+async function createAnySecret(data) {
+  const payload = {
+    name: data.name,
+    password: data.password,
+    service: 'any',
+    profile: data.profile || 'default',
+  };
+  if (data.remote_address) {
+    payload['remote-address'] = data.remote_address;
+  }
+  return post('ppp/secret', payload);
 }
 
 /**
@@ -377,6 +414,7 @@ module.exports = {
   createL2TPSecret,
   createSSTPSecret,
   createOVPNSecret,
+  createAnySecret,
   deleteSecret,
   listSecrets,
   // PPP profiles

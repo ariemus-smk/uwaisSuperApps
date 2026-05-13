@@ -3,7 +3,7 @@ import { NavLink } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { 
   LayoutDashboard, Users, Wifi, CreditCard, Network, 
-  Ticket, Package, Menu, X, LogOut, Shield, MapPin, ClipboardList, HelpCircle, Building, Gauge, Cpu
+  Ticket, Package, Menu, X, LogOut, Shield, MapPin, ClipboardList, HelpCircle, Building, Gauge, Cpu, Globe
 } from 'lucide-react';
 
 const Sidebar = () => {
@@ -23,6 +23,7 @@ const Sidebar = () => {
       { name: 'Manajemen Cabang', path: '/branches', icon: Building },
       { name: 'Paket Internet', path: '/packages', icon: Gauge },
       { name: 'Manajemen NAS', path: '/nas', icon: Cpu },
+      { name: 'VPN CHR Mikrotik', path: '/vpn-chr', icon: Globe },
       { name: 'Wilayah / Region', path: '/regions', icon: MapPin },
     ],
     Admin: [
@@ -36,6 +37,7 @@ const Sidebar = () => {
       { name: 'Manajemen Cabang', path: '/branches', icon: Building },
       { name: 'Paket Internet', path: '/packages', icon: Gauge },
       { name: 'Manajemen NAS', path: '/nas', icon: Cpu },
+      { name: 'VPN CHR Mikrotik', path: '/vpn-chr', icon: Globe },
       { name: 'Wilayah / Region', path: '/regions', icon: MapPin },
     ],
     Accounting: [

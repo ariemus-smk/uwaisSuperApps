@@ -31,14 +31,16 @@ async function create(nasData) {
     status = 'Active',
     vpn_accounts = null,
     config_script = null,
+    mikrotik_username = null,
+    mikrotik_password = null,
   } = nasData;
 
   const vpnAccountsJson = vpn_accounts ? JSON.stringify(vpn_accounts) : null;
 
   const [result] = await appPool.execute(
-    `INSERT INTO nas_devices (name, ip_address, radius_secret, api_port, branch_id, status, vpn_accounts, config_script, active_sessions, created_at, updated_at)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, 0, NOW(), NOW())`,
-    [name, ip_address, radius_secret, api_port, branch_id, status, vpnAccountsJson, config_script]
+    `INSERT INTO nas_devices (name, ip_address, radius_secret, api_port, mikrotik_username, mikrotik_password, branch_id, status, vpn_accounts, config_script, active_sessions, created_at, updated_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, NOW(), NOW())`,
+    [name, ip_address, radius_secret, api_port, mikrotik_username, mikrotik_password, branch_id, status, vpnAccountsJson, config_script]
   );
 
   return { id: result.insertId, ...nasData, status, vpn_accounts, config_script };
@@ -134,7 +136,7 @@ async function findAll(filters = {}) {
  * @returns {Promise<object>} Query result
  */
 async function update(id, data) {
-  const allowedFields = ['name', 'ip_address', 'radius_secret', 'api_port', 'branch_id', 'vpn_accounts', 'config_script', 'active_sessions'];
+  const allowedFields = ['name', 'ip_address', 'radius_secret', 'api_port', 'mikrotik_username', 'mikrotik_password', 'branch_id', 'vpn_accounts', 'config_script', 'active_sessions'];
   const setClauses = [];
   const params = [];
 
@@ -224,6 +226,19 @@ async function findByIpAddress(ipAddress) {
   return record;
 }
 
+/**
+ * Delete a NAS device record.
+ * @param {number} id - NAS device ID
+ * @returns {Promise<object>} Query result
+ */
+async function remove(id) {
+  const [result] = await appPool.execute(
+    'DELETE FROM nas_devices WHERE id = ?',
+    [id]
+  );
+  return result;
+}
+
 module.exports = {
   create,
   findById,
@@ -232,4 +247,5 @@ module.exports = {
   updateStatus,
   updatePollStatus,
   findByIpAddress,
+  remove,
 };

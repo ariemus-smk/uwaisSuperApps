@@ -176,11 +176,33 @@ async function getMonitoring(req, res) {
   }
 }
 
+/**
+ * Delete a NAS device.
+ * @param {object} req - Express request object
+ * @param {object} res - Express response object
+ */
+async function deleteNas(req, res) {
+  try {
+    const id = parseInt(req.params.id, 10);
+    if (isNaN(id)) {
+      return error(res, 'Invalid NAS ID.', 400, null, ERROR_CODE.VALIDATION_ERROR);
+    }
+
+    await nasService.deleteNas(id);
+    return success(res, null, 'NAS device deleted successfully.');
+  } catch (err) {
+    const statusCode = err.statusCode || 500;
+    const code = err.code || ERROR_CODE.INTERNAL_ERROR;
+    return error(res, err.message, statusCode, null, code);
+  }
+}
+
 module.exports = {
   listNas,
   getNas,
   registerNas,
   updateNas,
+  deleteNas,
   getScript,
   testConnectivity,
   getMonitoring,

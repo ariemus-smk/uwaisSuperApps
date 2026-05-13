@@ -18,6 +18,7 @@ import BranchesPage from './pages/Branches';
 import PackagesPage from './pages/Packages';
 import NasPage from './pages/Nas';
 import Regions from './pages/Regions';
+import VpnChr from './pages/VpnChr';
 
 // App css reset (remove default vite boilerplate css if active)
 import './index.css';
@@ -193,6 +194,15 @@ function App() {
             element={
               <ProtectedLayout>
                 <Regions />
+              </ProtectedLayout>
+            } 
+          />
+
+          <Route 
+            path="/vpn-chr" 
+            element={
+              <ProtectedLayout>
+                <VpnChr />
               </ProtectedLayout>
             } 
           />

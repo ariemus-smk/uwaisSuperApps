@@ -29,6 +29,8 @@ const NasPage = () => {
   const [radiusSecret, setRadiusSecret] = useState('');
   const [apiPort, setApiPort] = useState(8728);
   const [branchId, setBranchId] = useState('');
+  const [mikrotikUsername, setMikrotikUsername] = useState('');
+  const [mikrotikPassword, setMikrotikPassword] = useState('');
   
   // Script State
   const [scriptContent, setScriptContent] = useState('');
@@ -114,7 +116,9 @@ const NasPage = () => {
         ip_address: ipAddress,
         radius_secret: radiusSecret,
         api_port: Number(apiPort),
-        branch_id: Number(branchId)
+        branch_id: Number(branchId),
+        mikrotik_username: mikrotikUsername || null,
+        mikrotik_password: mikrotikPassword || null
       };
 
       const response = await axios.post('/api/nas', payload);
@@ -128,6 +132,8 @@ const NasPage = () => {
         setRadiusSecret('');
         setApiPort(8728);
         setBranchId('');
+        setMikrotikUsername('');
+        setMikrotikPassword('');
 
         setTimeout(() => {
           setFormSuccess(false);
@@ -150,6 +156,8 @@ const NasPage = () => {
     setRadiusSecret(nas.radius_secret || '');
     setApiPort(nas.api_port || 8728);
     setBranchId(nas.branch_id || '');
+    setMikrotikUsername(nas.mikrotik_username || '');
+    setMikrotikPassword(nas.mikrotik_password || '');
     setErrorMessage('');
     setShowEditModal(true);
   };
@@ -169,7 +177,9 @@ const NasPage = () => {
         ip_address: ipAddress,
         radius_secret: radiusSecret,
         api_port: Number(apiPort),
-        branch_id: Number(branchId)
+        branch_id: Number(branchId),
+        mikrotik_username: mikrotikUsername || null,
+        mikrotik_password: mikrotikPassword || null
       };
 
       const response = await axios.put(`/api/nas/${editingNasId}`, payload);
@@ -180,6 +190,8 @@ const NasPage = () => {
           setFormSuccess(false);
           setShowEditModal(false);
           setEditingNasId(null);
+          setMikrotikUsername('');
+          setMikrotikPassword('');
         }, 1500);
       } else {
         setErrorMessage(response.data?.message || 'Gagal menyimpan pembaruan NAS.');
@@ -233,20 +245,16 @@ const NasPage = () => {
     if (!isConfirmed) return;
 
     try {
-      const response = await axios.delete(`/api/nas/${id}`); // Let's check if DELETE exist. In documentation there's no DELETE listed, wait! Let's check API documentation if DELETE /api/nas exists.
-      // Ah! In documentation, Section 9 only lists:
-      // GET /api/nas
-      // GET /api/nas/monitoring
-      // GET /api/nas/:id
-      // POST /api/nas
-      // PUT /api/nas/:id
-      // GET /api/nas/:id/script
-      // POST /api/nas/:id/test
-      // Wait, there is indeed NO delete listed. If there is no delete endpoint, we can hide/disable deleting, or show warning, or keep it as an optimistic delete or simulated if it fails, or just omit it to prevent 404 errors!
-      // To be extremely safe and perfect, we should check if DELETE works, or if there's no DELETE, we just omit the delete button to match the precise documentation!
-      // Let's omit the delete button, or change it to an inactive toggle since changing branch/disabling is more standard if deleting is not supported! This is very wise. Let's make it so only edit and test and view script are shown! This perfectly aligns with the documentation.
+      const response = await axios.delete(`/api/nas/${id}`);
+      if (response.data && response.data.status === 'success') {
+        alert('Router NAS berhasil dihapus dari database!');
+        fetchAllData();
+      } else {
+        alert(response.data?.message || 'Gagal menghapus router.');
+      }
     } catch (err) {
-      console.error("Delete is omitted for documentation safety");
+      console.error("Failed to delete NAS:", err);
+      alert(err.response?.data?.message || err.message || 'Gagal menghapus router.');
     }
   };
 
@@ -470,7 +478,18 @@ const NasPage = () => {
                         className="p-1.5 bg-slate-900 hover:bg-slate-850 border border-slate-850 hover:border-slate-800 rounded-lg text-slate-400 hover:text-indigo-400 transition-all flex items-center justify-center"
                         title="Edit NAS Parameters"
                       >
-                        <Edit className="h-3 w-3" />
+                        <Edit className="h-3.5 w-3.5" />
+                      </button>
+                    )}
+
+                    {/* Delete Router */}
+                    {(activeRole === 'Superadmin') && (
+                      <button 
+                        onClick={() => handleDeleteNas(nas.id, nas.name)}
+                        className="p-1.5 bg-slate-900 hover:bg-slate-850 border border-slate-850 hover:border-slate-800 rounded-lg text-slate-400 hover:text-rose-400 transition-all flex items-center justify-center"
+                        title="Hapus NAS Router"
+                      >
+                        <Trash2 className="h-3.5 w-3.5" />
                       </button>
                     )}
                   </div>
@@ -579,6 +598,32 @@ const NasPage = () => {
                           <option key={b.id} value={b.id}>{b.name}</option>
                         ))}
                       </select>
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    {/* Mikrotik API Username */}
+                    <div className="space-y-1">
+                      <label className="text-[10px] font-bold text-slate-400 block">MikroTik API Username (Opsional)</label>
+                      <input 
+                        type="text" 
+                        placeholder="e.g. admin"
+                        value={mikrotikUsername}
+                        onChange={(e) => setMikrotikUsername(e.target.value)}
+                        className="w-full input-field text-xs font-mono" 
+                      />
+                    </div>
+
+                    {/* Mikrotik API Password */}
+                    <div className="space-y-1">
+                      <label className="text-[10px] font-bold text-slate-400 block">MikroTik API Password (Opsional)</label>
+                      <input 
+                        type="password" 
+                        placeholder="Kunci rahasia API"
+                        value={mikrotikPassword}
+                        onChange={(e) => setMikrotikPassword(e.target.value)}
+                        className="w-full input-field text-xs font-mono" 
+                      />
                     </div>
                   </div>
 
@@ -706,6 +751,32 @@ const NasPage = () => {
                           <option key={b.id} value={b.id}>{b.name}</option>
                         ))}
                       </select>
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    {/* Mikrotik API Username */}
+                    <div className="space-y-1">
+                      <label className="text-[10px] font-bold text-slate-400 block">MikroTik API Username (Opsional)</label>
+                      <input 
+                        type="text" 
+                        placeholder="e.g. admin"
+                        value={mikrotikUsername}
+                        onChange={(e) => setMikrotikUsername(e.target.value)}
+                        className="w-full input-field text-xs font-mono" 
+                      />
+                    </div>
+
+                    {/* Mikrotik API Password */}
+                    <div className="space-y-1">
+                      <label className="text-[10px] font-bold text-slate-400 block">MikroTik API Password (Opsional)</label>
+                      <input 
+                        type="password" 
+                        placeholder="Kunci rahasia API"
+                        value={mikrotikPassword}
+                        onChange={(e) => setMikrotikPassword(e.target.value)}
+                        className="w-full input-field text-xs font-mono" 
+                      />
                     </div>
                   </div>
 
