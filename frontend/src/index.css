@@ -1,0 +1,117 @@
+@import url('https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;800&family=Inter:wght@300;400;500;600;700&display=swap');
+@import "leaflet/dist/leaflet.css";
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  body {
+    @apply bg-slate-950 text-slate-100 antialiased font-sans selection:bg-brand-500/30 selection:text-brand-200 overflow-x-hidden;
+    background-image: 
+      radial-gradient(at 0% 0%, rgba(139, 92, 246, 0.08) 0px, transparent 50%),
+      radial-gradient(at 100% 100%, rgba(16, 185, 129, 0.05) 0px, transparent 50%);
+    background-attachment: fixed;
+  }
+}
+
+/* Custom scrollbar */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+::-webkit-scrollbar-track {
+  @apply bg-slate-900;
+}
+::-webkit-scrollbar-thumb {
+  @apply bg-slate-700/50 rounded-full hover:bg-brand-500/70 transition-colors;
+}
+
+/* Custom Premium Utility Classes */
+.glass-panel {
+  @apply bg-slate-900/60 backdrop-blur-md border border-slate-800/80 rounded-2xl shadow-xl shadow-black/20;
+}
+
+.glass-panel-hover {
+  @apply hover:bg-slate-900/80 hover:border-brand-500/30 hover:shadow-brand-500/5 transition-all duration-300;
+}
+
+.glass-card {
+  @apply bg-slate-900/40 backdrop-blur-sm border border-slate-800/60 rounded-xl p-5 shadow-lg;
+}
+
+.glow-btn-primary {
+  @apply bg-gradient-to-r from-brand-600 to-indigo-600 text-white font-medium px-5 py-2.5 rounded-xl 
+         shadow-lg shadow-brand-500/20 hover:shadow-brand-500/35 hover:scale-[1.02] active:scale-[0.98] 
+         transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed;
+}
+
+.glow-btn-success {
+  @apply bg-gradient-to-r from-emerald-600 to-teal-600 text-white font-medium px-5 py-2.5 rounded-xl 
+         shadow-lg shadow-emerald-500/20 hover:shadow-emerald-500/35 hover:scale-[1.02] active:scale-[0.98] 
+         transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed;
+}
+
+.glow-btn-danger {
+  @apply bg-gradient-to-r from-rose-600 to-red-600 text-white font-medium px-5 py-2.5 rounded-xl 
+         shadow-lg shadow-rose-500/20 hover:shadow-rose-500/35 hover:scale-[1.02] active:scale-[0.98] 
+         transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed;
+}
+
+.glow-btn-secondary {
+  @apply bg-slate-800 hover:bg-slate-700 text-slate-200 font-medium px-5 py-2.5 rounded-xl 
+         border border-slate-700/80 hover:border-slate-600 transition-all duration-200 
+         hover:scale-[1.02] active:scale-[0.98];
+}
+
+/* Gradients text */
+.gradient-text-primary {
+  @apply bg-clip-text text-transparent bg-gradient-to-r from-brand-400 via-indigo-400 to-emerald-400;
+}
+
+.gradient-text-emerald {
+  @apply bg-clip-text text-transparent bg-gradient-to-r from-emerald-400 to-teal-300;
+}
+
+/* Animations */
+@keyframes pulseGlow {
+  0%, 100% {
+    opacity: 0.3;
+    transform: scale(1);
+  }
+  50% {
+    opacity: 0.6;
+    transform: scale(1.05);
+  }
+}
+
+.pulse-glow {
+  animation: pulseGlow 4s infinite ease-in-out;
+}
+
+/* Input Styles */
+.input-field {
+  @apply bg-slate-950/80 border border-slate-800/80 rounded-xl px-4 py-2.5 text-slate-100 placeholder:text-slate-500 
+         focus:border-brand-500 focus:ring-2 focus:ring-brand-500/20 outline-none transition-all duration-150;
+}
+
+/* Fix for icons overlapping with input text globally */
+.pl-9 {
+  padding-left: 2.5rem !important;
+}
+
+.pl-10 {
+  padding-left: 2.75rem !important;
+}
+
+.pl-11 {
+  padding-left: 3.25rem !important;
+}
+
+/* Perfectly center absolute positioning for ALL icons inside relative input wrapper */
+.relative > .absolute[class*="left-"] {
+  left: 0.875rem !important;
+  top: 50% !important;
+  transform: translateY(-50%) !important;
+  pointer-events: none;
+}

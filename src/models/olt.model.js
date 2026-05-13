@@ -135,10 +135,24 @@ async function findByIpAddress(ipAddress) {
   return rows.length === 0 ? null : rows[0];
 }
 
+/**
+ * Delete an OLT record.
+ * @param {number} id - OLT ID
+ * @returns {Promise<boolean>} True if deleted
+ */
+async function deleteById(id) {
+  const [result] = await appPool.execute(
+    'DELETE FROM olts WHERE id = ?',
+    [id]
+  );
+  return result.affectedRows > 0;
+}
+
 module.exports = {
   create,
   findById,
   findAll,
   update,
   findByIpAddress,
+  deleteById,
 };

@@ -46,25 +46,25 @@ async function findByKtp(ktpNumber) {
 async function findAll(filters = {}) {
   const { branch_id, lifecycle_status, search, page = 1, limit = 20 } = filters;
 
-  let countQuery = 'SELECT COUNT(*) as total FROM customers WHERE 1=1';
-  let dataQuery = 'SELECT * FROM customers WHERE 1=1';
+  let countQuery = 'SELECT COUNT(*) as total FROM customers c WHERE 1=1';
+  let dataQuery = 'SELECT c.*, b.name as branch FROM customers c LEFT JOIN branches b ON c.branch_id = b.id WHERE 1=1';
   const params = [];
 
   if (branch_id) {
-    countQuery += ' AND branch_id = ?';
-    dataQuery += ' AND branch_id = ?';
+    countQuery += ' AND c.branch_id = ?';
+    dataQuery += ' AND c.branch_id = ?';
     params.push(branch_id);
   }
 
   if (lifecycle_status) {
-    countQuery += ' AND lifecycle_status = ?';
-    dataQuery += ' AND lifecycle_status = ?';
+    countQuery += ' AND c.lifecycle_status = ?';
+    dataQuery += ' AND c.lifecycle_status = ?';
     params.push(lifecycle_status);
   }
 
   if (search) {
-    countQuery += ' AND (full_name LIKE ? OR ktp_number LIKE ?)';
-    dataQuery += ' AND (full_name LIKE ? OR ktp_number LIKE ?)';
+    countQuery += ' AND (c.full_name LIKE ? OR c.ktp_number LIKE ?)';
+    dataQuery += ' AND (c.full_name LIKE ? OR c.ktp_number LIKE ?)';
     const searchPattern = `%${search}%`;
     params.push(searchPattern, searchPattern);
   }
@@ -73,7 +73,7 @@ async function findAll(filters = {}) {
   const total = countRows[0].total;
 
   const offset = (page - 1) * limit;
-  dataQuery += ' ORDER BY created_at DESC LIMIT ? OFFSET ?';
+  dataQuery += ' ORDER BY c.created_at DESC LIMIT ? OFFSET ?';
   const dataParams = [...params, String(limit), String(offset)];
 
   const [rows] = await appPool.execute(dataQuery, dataParams);
@@ -105,6 +105,13 @@ async function create(data) {
     whatsapp_number,
     email = null,
     address,
+    rt = null,
+    rw = null,
+    dusun = null,
+    desa = null,
+    kecamatan = null,
+    kabupaten = null,
+    provinsi = null,
     latitude = null,
     longitude = null,
     branch_id,
@@ -114,9 +121,9 @@ async function create(data) {
   const lifecycle_status = CUSTOMER_STATUS.PROSPEK;
 
   const [result] = await appPool.execute(
-    `INSERT INTO customers (full_name, ktp_number, npwp_number, whatsapp_number, email, address, latitude, longitude, lifecycle_status, branch_id, registered_by, created_at, updated_at)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW(), NOW())`,
-    [full_name, ktp_number, npwp_number, whatsapp_number, email, address, latitude, longitude, lifecycle_status, branch_id, registered_by]
+    `INSERT INTO customers (full_name, ktp_number, npwp_number, whatsapp_number, email, address, rt, rw, dusun, desa, kecamatan, kabupaten, provinsi, latitude, longitude, lifecycle_status, branch_id, registered_by, created_at, updated_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW(), NOW())`,
+    [full_name, ktp_number, npwp_number, whatsapp_number, email, address, rt, rw, dusun, desa, kecamatan, kabupaten, provinsi, latitude, longitude, lifecycle_status, branch_id, registered_by]
   );
 
   return { id: result.insertId, ...data, lifecycle_status };
@@ -129,7 +136,11 @@ async function create(data) {
  * @returns {Promise<object>} Query result
  */
 async function update(id, updateData) {
-  const allowedFields = ['full_name', 'npwp_number', 'whatsapp_number', 'email', 'address', 'latitude', 'longitude'];
+  const allowedFields = [
+    'full_name', 'npwp_number', 'whatsapp_number', 'email', 'address',
+    'rt', 'rw', 'dusun', 'desa', 'kecamatan', 'kabupaten', 'provinsi',
+    'latitude', 'longitude'
+  ];
   const setClauses = [];
   const params = [];
 

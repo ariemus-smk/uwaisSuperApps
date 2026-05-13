@@ -136,6 +136,15 @@ router.post(
   infrastructureController.testOltConnectivity
 );
 
+// DELETE /api/infrastructure/olts/:id - Superadmin only
+router.delete(
+  '/olts/:id',
+  authenticate,
+  authorize(USER_ROLE.SUPERADMIN),
+  validate(idParamSchema, 'params'),
+  infrastructureController.deleteOlt
+);
+
 // ============================================================
 // ODP Routes
 // ============================================================
@@ -166,6 +175,15 @@ router.put(
   validate(idParamSchema, 'params'),
   validate(updateOdpSchema, 'body'),
   infrastructureController.updateOdp
+);
+
+// DELETE /api/infrastructure/odps/:id - Admin, Superadmin, Teknisi
+router.delete(
+  '/odps/:id',
+  authenticate,
+  authorize(USER_ROLE.ADMIN, USER_ROLE.SUPERADMIN, USER_ROLE.TEKNISI),
+  validate(idParamSchema, 'params'),
+  infrastructureController.deleteOdp
 );
 
 // ============================================================

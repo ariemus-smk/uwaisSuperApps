@@ -41,9 +41,9 @@ async function registerOlt(oltData) {
     });
   }
 
-  // Perform connectivity test to determine initial status
-  const reachable = await testTcpConnection(ip_address, 23, 5000);
-  const status = reachable ? 'Active' : 'Inactive';
+  // Perform connectivity test to determine initial status, but default status to Active so that admins can add ODPs immediately
+  const reachable = await testTcpConnection(ip_address, 23, 5000).catch(() => false);
+  const status = 'Active';
 
   // Create OLT record
   const olt = await oltModel.create({

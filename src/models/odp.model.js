@@ -217,6 +217,19 @@ async function decrementUsedPorts(id) {
   return result;
 }
 
+/**
+ * Delete an ODP record.
+ * @param {number} id - ODP ID
+ * @returns {Promise<boolean>} True if deleted
+ */
+async function deleteById(id) {
+  const [result] = await appPool.execute(
+    'DELETE FROM odps WHERE id = ?',
+    [id]
+  );
+  return result.affectedRows > 0;
+}
+
 module.exports = {
   create,
   findById,
@@ -226,4 +239,5 @@ module.exports = {
   findNearby,
   incrementUsedPorts,
   decrementUsedPorts,
+  deleteById,
 };
