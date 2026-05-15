@@ -4,7 +4,7 @@ import CustomMap from '../components/CustomMap';
 import StatusBadge from '../components/StatusBadge';
 import axios from 'axios';
 import { 
-  Wifi, HelpCircle, HardDrive, Key, Plus, CheckCircle, AlertCircle, RefreshCw, Send, Radio
+  Wifi, HelpCircle, HardDrive, Key, Plus, CheckCircle, AlertCircle, RefreshCw, Send, Radio, Trash2, Zap
 } from 'lucide-react';
 
 const Subscriptions = () => {
@@ -24,11 +24,14 @@ const Subscriptions = () => {
   const [odpPort, setOdpPort] = useState(null);
   const [onuSn, setOnuSn] = useState('');
   const [onuMac, setOnuMac] = useState('');
+  const [customerCoords, setCustomerCoords] = useState(null);
 
   // Dropdown lists
   const [customersList, setCustomersList] = useState([]);
   const [packagesList, setPackagesList] = useState([]);
   const [nasList, setNasList] = useState([]);
+  const [olts, setOlts] = useState([]);
+  const [odps, setOdps] = useState([]);
 
   // Generated results simulation
   const [generatedUser, setGeneratedUser] = useState('');
@@ -79,7 +82,12 @@ const Subscriptions = () => {
           if (custRes.data?.status === 'success') {
             const arr = custRes.data.data?.customers || custRes.data.data || [];
             setCustomersList(arr);
-            if (arr.length > 0) setSelectedCustId(arr[0].id);
+            if (arr.length > 0) {
+              setSelectedCustId(arr[0].id);
+              if (arr[0].latitude && arr[0].longitude) {
+                setCustomerCoords({ lat: parseFloat(arr[0].latitude), lng: parseFloat(arr[0].longitude) });
+              }
+            }
           }
           if (packRes.data?.status === 'success') {
             const arr = packRes.data.data?.packages || packRes.data.data || [];
@@ -91,6 +99,14 @@ const Subscriptions = () => {
             setNasList(arr);
             if (arr.length > 0) setNasId(arr[0].id);
           }
+
+          // Fetch Infrastructure for Map
+          const [oltRes, odpRes] = await Promise.all([
+            axios.get('/api/infrastructure/olts', { params: { limit: 100 } }),
+            axios.get('/api/infrastructure/odps', { params: { limit: 100 } })
+          ]);
+          if (oltRes.data?.status === 'success') setOlts(oltRes.data.data || []);
+          if (odpRes.data?.status === 'success') setOdps(odpRes.data.data || []);
         } catch (err) {
           console.error('Failed to load wizard options', err);
         }
@@ -100,7 +116,50 @@ const Subscriptions = () => {
   }, [showWizard]);
 
   const handleMapSelection = (latLng) => {
-    // Selected coordinates
+    setCustomerCoords(latLng);
+  };
+
+  const handleDelete = async (id, username) => {
+    if (!window.confirm(`Apakah Anda yakin ingin menghapus layanan PPPoE ${username}? Akun di Mikrotik/RADIUS juga akan dihapus.`)) {
+      return;
+    }
+
+    try {
+      setListLoading(true);
+      await axios.delete(`/api/subscriptions/${id}`);
+      await fetchSubscriptions();
+    } catch (err) {
+      console.error("Delete failed:", err);
+      alert(err.response?.data?.message || err.message || 'Gagal menghapus layanan');
+    } finally {
+      setListLoading(false);
+    }
+  };
+  
+  const handleCoA = async (subId, nasId, username) => {
+    if (!window.confirm(`Kirim perintah CoA/POD untuk memutuskan sesi ${username}? Pelanggan akan terputus sebentar dan otomatis dial-ulang.`)) {
+      return;
+    }
+
+    try {
+      setListLoading(true);
+      const response = await axios.post('/api/coa/kick', {
+        subscription_id: subId,
+        nas_id: nasId,
+        username: username
+      });
+
+      if (response.data?.status === 'success') {
+        alert(`Berhasil! Perintah CoA terkirim ke NAS. Sesi ${username} telah diputus.`);
+      } else {
+        alert(`Gagal: ${response.data?.message || 'NAS tidak merespon perintah CoA'}`);
+      }
+    } catch (err) {
+      console.error("CoA failed:", err);
+      alert(err.response?.data?.message || err.message || 'Gagal mengirim perintah CoA');
+    } finally {
+      setListLoading(false);
+    }
   };
 
   const handleOdpPortSelect = (portNum, odp) => {
@@ -134,8 +193,8 @@ const Subscriptions = () => {
         odp_port: Number(odpPort),
         onu_serial_number: onuSn,
         onu_mac_address: onuMac,
-        install_latitude: -1.2654,
-        install_longitude: 116.8312
+        install_latitude: customerCoords?.lat || -1.2654,
+        install_longitude: customerCoords?.lng || 116.8312
       };
       const installRes = await axios.post(`/api/subscriptions/${subId}/installation`, installPayload);
       if (installRes.data?.status !== 'success') throw new Error('Gagal menyimpan instalasi');
@@ -208,7 +267,14 @@ const Subscriptions = () => {
                   <label className="text-xs font-bold text-slate-400">Pilih Calon Pelanggan (Status Instalasi)</label>
                   <select 
                     value={selectedCustId} 
-                    onChange={(e) => setSelectedCustId(e.target.value)}
+                    onChange={(e) => {
+                      const id = e.target.value;
+                      setSelectedCustId(id);
+                      const cust = customersList.find(c => c.id.toString() === id.toString());
+                      if (cust && cust.latitude && cust.longitude) {
+                        setCustomerCoords({ lat: parseFloat(cust.latitude), lng: parseFloat(cust.longitude) });
+                      }
+                    }}
                     className="w-full input-field text-xs bg-slate-950"
                   >
                     {customersList.length === 0 && <option value="">-- Tidak ada pelanggan Instalasi --</option>}
@@ -268,6 +334,9 @@ const Subscriptions = () => {
                   <CustomMap 
                     onLocationSelect={handleMapSelection} 
                     onPortSelect={handleOdpPortSelect}
+                    olts={olts}
+                    odps={odps}
+                    searchCoords={customerCoords}
                   />
                 </div>
 
@@ -357,7 +426,11 @@ const Subscriptions = () => {
               </div>
 
               <button 
-                onClick={() => { setShowWizard(false); setStep(1); }} 
+                onClick={() => { 
+                  setShowWizard(false); 
+                  setStep(1); 
+                  fetchSubscriptions();
+                }} 
                 className="glow-btn-primary text-xs font-bold py-2.5 px-8 w-full"
               >
                 Selesai & Tutup Panel
@@ -388,23 +461,60 @@ const Subscriptions = () => {
                 <th className="py-4 px-6 font-semibold">Serial Number ONT</th>
                 <th className="py-4 px-6 font-semibold">Speed Limit</th>
                 <th className="py-4 px-6 text-center">Status Sesi</th>
+                <th className="py-4 px-6 text-center">Aksi</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-800/50">
               {subscriptions.map((sub) => (
                 <tr key={sub.id} className="hover:bg-slate-800/15">
-                  <td className="py-4 px-6 font-mono font-bold text-slate-200">{sub.pppoe_user || `bpn_user_${sub.id}@uwais`}</td>
-                  <td className="py-4 px-6 font-bold text-slate-300">{sub.customer_name || 'Active Customer'}</td>
-                  <td className="py-4 px-6 font-medium text-slate-400">
-                    <span className="bg-slate-950 border border-slate-800 px-2 py-0.5 rounded font-mono text-[10px]">
-                      {sub.status === 'Suspended' ? 'Address-List: ISOLIR' : 'Address-List: LOCAL-BYPASS'}
-                    </span>
+                  <td className="py-4 px-6 font-mono font-bold text-slate-200">{sub.pppoe_username}</td>
+                  <td className="py-4 px-6 font-bold text-slate-300">{sub.customer_name}</td>
+                  
+                  {/* Improved Mikrotik Address List Column */}
+                  <td className="py-4 px-6 font-medium">
+                    <div className="flex flex-col space-y-1">
+                      <div className="flex items-center space-x-1.5">
+                        <span className="text-[10px] text-slate-500 font-bold uppercase">Pool:</span>
+                        <span className="text-brand-400 font-mono text-[10px] font-bold">
+                          {sub.ip_pool || 'PPPOE-POOL'}
+                        </span>
+                      </div>
+                      <span className={`px-2 py-0.5 rounded border text-[9px] font-bold font-mono w-fit ${
+                        sub.status === 'Isolir' 
+                          ? 'bg-rose-500/10 border-rose-500/20 text-rose-400' 
+                          : 'bg-emerald-500/10 border-emerald-500/20 text-emerald-400'
+                      }`}>
+                        {sub.status === 'Isolir' ? 'LIST: ISOLIR' : 'LIST: ACTIVE-CLIENT'}
+                      </span>
+                    </div>
                   </td>
-                  <td className="py-4 px-6 text-slate-400 font-semibold">{sub.odp_name || 'ODP-HQ'} [Port {sub.port || 1}]</td>
-                  <td className="py-4 px-6 font-mono text-slate-400">{sub.onu_sn || 'ZTEGC0000000'}</td>
-                  <td className="py-4 px-6 font-mono text-brand-400 font-bold">{sub.speed_limit || '20M'}</td>
+
+                  <td className="py-4 px-6 text-slate-400 font-semibold">
+                    {sub.odp_name || 'Direct'} [Port {sub.odp_port || '-'}]
+                  </td>
+                  <td className="py-4 px-6 font-mono text-slate-400">{sub.onu_serial_number}</td>
+                  <td className="py-4 px-6 font-mono text-brand-400 font-bold">{sub.package_name || '-'}</td>
                   <td className="py-4 px-6 text-center">
                     <StatusBadge status={sub.status === 'Active' ? 'ACTIVE' : 'ISOLIR'} />
+                  </td>
+                  <td className="py-4 px-6 text-center">
+                    <div className="flex items-center justify-center space-x-1">
+                      <button 
+                        onClick={() => handleCoA(sub.id, sub.nas_id, sub.pppoe_username)}
+                        className="p-2 text-slate-500 hover:text-brand-400 hover:bg-brand-400/10 rounded-lg transition-colors"
+                        title="Kirim CoA (Reset Sesi)"
+                      >
+                        <Zap className="h-4 w-4" />
+                      </button>
+
+                      <button 
+                        onClick={() => handleDelete(sub.id, sub.pppoe_username)}
+                        className="p-2 text-slate-500 hover:text-red-400 hover:bg-red-400/10 rounded-lg transition-colors"
+                        title="Hapus Layanan"
+                      >
+                        <Trash2 className="h-4 w-4" />
+                      </button>
+                    </div>
                   </td>
                 </tr>
               ))}

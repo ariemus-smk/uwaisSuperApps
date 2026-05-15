@@ -23,7 +23,7 @@ const { ERROR_CODE } = require('../utils/constants');
  * @returns {Promise<object>} Registered OLT record with connectivity result
  */
 async function registerOlt(oltData) {
-  const { name, ip_address, total_pon_ports, branch_id } = oltData;
+  const { name, ip_address, total_pon_ports, branch_id, latitude, longitude } = oltData;
 
   if (!name || !ip_address || !total_pon_ports || !branch_id) {
     throw Object.assign(new Error('Name, IP address, total PON ports, and branch_id are required.'), {
@@ -51,6 +51,8 @@ async function registerOlt(oltData) {
     ip_address,
     total_pon_ports,
     branch_id,
+    latitude,
+    longitude,
     status,
   });
 

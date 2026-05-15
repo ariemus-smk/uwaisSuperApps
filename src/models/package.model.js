@@ -74,13 +74,14 @@ async function create(data) {
     fup_upload_speed = null,
     fup_download_speed = null,
     status = 'Active',
+    ip_pool = null,
   } = data;
 
   const [result] = await appPool.execute(
     `INSERT INTO packages (name, upload_rate_limit, download_rate_limit, upload_burst_limit, download_burst_limit,
-      upload_burst_threshold, download_burst_threshold, monthly_price, ppn_enabled, fup_enabled,
+      upload_burst_threshold, download_burst_threshold, ip_pool, monthly_price, ppn_enabled, fup_enabled,
       fup_quota_gb, fup_upload_speed, fup_download_speed, status, created_at, updated_at)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW(), NOW())`,
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW(), NOW())`,
     [
       name,
       upload_rate_limit,
@@ -89,6 +90,7 @@ async function create(data) {
       download_burst_limit,
       upload_burst_threshold,
       download_burst_threshold,
+      ip_pool,
       monthly_price,
       ppn_enabled ? 1 : 0,
       fup_enabled ? 1 : 0,
@@ -127,6 +129,7 @@ async function update(id, data) {
     'fup_upload_speed',
     'fup_download_speed',
     'status',
+    'ip_pool',
   ];
 
   for (const field of allowedFields) {

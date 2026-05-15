@@ -31,6 +31,8 @@ const createOltSchema = Joi.object({
   ip_address: Joi.string().trim().ip({ version: ['ipv4'] }).required(),
   total_pon_ports: Joi.number().integer().min(1).max(128).required(),
   branch_id: Joi.number().integer().positive().required(),
+  latitude: Joi.number().min(-90).max(90).allow(null, '').optional(),
+  longitude: Joi.number().min(-180).max(180).allow(null, '').optional(),
 });
 
 const updateOltSchema = Joi.object({
@@ -39,6 +41,8 @@ const updateOltSchema = Joi.object({
   total_pon_ports: Joi.number().integer().min(1).max(128),
   branch_id: Joi.number().integer().positive(),
   status: Joi.string().valid('Active', 'Inactive'),
+  latitude: Joi.number().min(-90).max(90).allow(null, ''),
+  longitude: Joi.number().min(-180).max(180).allow(null, ''),
 }).min(1);
 
 const idParamSchema = Joi.object({
@@ -64,6 +68,7 @@ const createOdpSchema = Joi.object({
   olt_id: Joi.number().integer().positive().required(),
   olt_pon_port: Joi.number().integer().min(1).max(128).required(),
   branch_id: Joi.number().integer().positive().required(),
+  parent: Joi.string().trim().max(100).allow(null, '').optional(),
 });
 
 const updateOdpSchema = Joi.object({
@@ -75,6 +80,7 @@ const updateOdpSchema = Joi.object({
   olt_pon_port: Joi.number().integer().min(1).max(128),
   branch_id: Joi.number().integer().positive(),
   status: Joi.string().valid('Active', 'Inactive'),
+  parent: Joi.string().trim().max(100).allow(null, ''),
 }).min(1);
 
 const listOdpsQuerySchema = Joi.object({

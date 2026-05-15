@@ -17,6 +17,7 @@ const Infrastructure = () => {
   const [listLoading, setListLoading] = useState(false);
   const [errorMessage, setErrorMessage] = useState('');
   const [successMessage, setSuccessMessage] = useState('');
+  const [mapFocus, setMapFocus] = useState(null);
 
   // Inventories state
   const [olts, setOlts] = useState([]);
@@ -34,6 +35,8 @@ const Infrastructure = () => {
   const [oltIp, setOltIp] = useState('');
   const [oltPonPorts, setOltPonPorts] = useState('8');
   const [oltBranchId, setOltBranchId] = useState('');
+  const [oltLat, setOltLat] = useState('');
+  const [oltLng, setOltLng] = useState('');
 
   // OLT Edit Form state
   const [editingOltId, setEditingOltId] = useState('');
@@ -42,6 +45,8 @@ const Infrastructure = () => {
   const [editOltPonPorts, setEditOltPonPorts] = useState('8');
   const [editOltBranchId, setEditOltBranchId] = useState('');
   const [editOltStatus, setEditOltStatus] = useState('Active');
+  const [editOltLat, setEditOltLat] = useState('');
+  const [editOltLng, setEditOltLng] = useState('');
 
   // ODP Create Form state
   const [odpName, setOdpName] = useState('');
@@ -51,6 +56,7 @@ const Infrastructure = () => {
   const [odpOltId, setOdpOltId] = useState('');
   const [odpOltPonPort, setOdpOltPonPort] = useState('1');
   const [odpBranchId, setOdpBranchId] = useState('');
+  const [odpParent, setOdpParent] = useState('');
 
   // ODP Edit Form state
   const [editingOdpId, setEditingOdpId] = useState('');
@@ -62,6 +68,7 @@ const Infrastructure = () => {
   const [editOdpOltPonPort, setEditOdpOltPonPort] = useState('1');
   const [editOdpBranchId, setEditOdpBranchId] = useState('');
   const [editOdpStatus, setEditOdpStatus] = useState('Active');
+  const [editOdpParent, setEditOdpParent] = useState('');
 
   const [opDefaultBranchId, setOpDefaultBranchId] = useState('');
 
@@ -150,7 +157,9 @@ const Infrastructure = () => {
         name: oltName,
         ip_address: oltIp,
         total_pon_ports: parseInt(oltPonPorts, 10),
-        branch_id: parseInt(oltBranchId, 10)
+        branch_id: parseInt(oltBranchId, 10),
+        latitude: oltLat ? parseFloat(oltLat) : null,
+        longitude: oltLng ? parseFloat(oltLng) : null,
       };
 
       const res = await axios.post('/api/infrastructure/olts', payload);
@@ -160,6 +169,8 @@ const Infrastructure = () => {
         // Reset form
         setOltName('');
         setOltIp('');
+        setOltLat('');
+        setOltLng('');
         fetchInventory();
       }
     } catch (err) {
@@ -175,6 +186,8 @@ const Infrastructure = () => {
     setEditOltPonPorts(olt.total_pon_ports.toString());
     setEditOltBranchId(olt.branch_id.toString());
     setEditOltStatus(olt.status || 'Active');
+    setEditOltLat(olt.latitude ? olt.latitude.toString() : '');
+    setEditOltLng(olt.longitude ? olt.longitude.toString() : '');
     setIsEditOltModalOpen(true);
   };
 
@@ -190,7 +203,9 @@ const Infrastructure = () => {
         ip_address: editOltIp,
         total_pon_ports: parseInt(editOltPonPorts, 10),
         branch_id: parseInt(editOltBranchId, 10),
-        status: editOltStatus
+        status: editOltStatus,
+        latitude: editOltLat ? parseFloat(editOltLat) : null,
+        longitude: editOltLng ? parseFloat(editOltLng) : null,
       };
 
       const res = await axios.put(`/api/infrastructure/olts/${editingOltId}`, payload);
@@ -242,7 +257,8 @@ const Infrastructure = () => {
         total_ports: parseInt(odpTotalPorts, 10),
         olt_id: parseInt(odpOltId, 10),
         olt_pon_port: parseInt(odpOltPonPort, 10),
-        branch_id: parseInt(odpBranchId, 10)
+        branch_id: parseInt(odpBranchId, 10),
+        parent: odpParent || null
       };
 
       const res = await axios.post('/api/infrastructure/odps', payload);
@@ -253,6 +269,7 @@ const Infrastructure = () => {
         setOdpName('');
         setOdpLat('');
         setOdpLng('');
+        setOdpParent('');
         fetchInventory();
       }
     } catch (err) {
@@ -271,6 +288,7 @@ const Infrastructure = () => {
     setEditOdpOltPonPort(odp.olt_pon_port ? odp.olt_pon_port.toString() : '1');
     setEditOdpBranchId(odp.branch_id ? odp.branch_id.toString() : '');
     setEditOdpStatus(odp.status || 'Active');
+    setEditOdpParent(odp.parent || '');
     setIsEditOdpModalOpen(true);
   };
 
@@ -289,7 +307,8 @@ const Infrastructure = () => {
         olt_id: parseInt(editOdpOltId, 10),
         olt_pon_port: parseInt(editOdpOltPonPort, 10),
         branch_id: parseInt(editOdpBranchId, 10),
-        status: editOdpStatus
+        status: editOdpStatus,
+        parent: editOdpParent || null
       };
 
       const res = await axios.put(`/api/infrastructure/odps/${editingOdpId}`, payload);
@@ -416,7 +435,13 @@ const Infrastructure = () => {
 
         {/* Dynamic map simulation */}
         <div className="lg:col-span-2">
-          <CustomMap searchCoords={searchCoords} />
+          <CustomMap 
+            searchCoords={searchCoords} 
+            olts={olts} 
+            odps={odps} 
+            focusCoords={mapFocus}
+            loading={listLoading}
+          />
         </div>
       </div>
 
@@ -438,10 +463,17 @@ const Infrastructure = () => {
               olts.map(olt => (
                 <div key={olt.id} className="p-4 bg-slate-950 rounded-xl border border-slate-800 space-y-3">
                   <div className="flex justify-between items-center">
-                    <span className="text-xs font-bold text-slate-200 flex items-center space-x-1.5">
+                    <button 
+                      onClick={() => {
+                        if (olt.latitude && olt.longitude) {
+                          setMapFocus({ lat: parseFloat(olt.latitude), lng: parseFloat(olt.longitude) });
+                        }
+                      }}
+                      className="text-xs font-bold text-slate-200 flex items-center space-x-1.5 hover:text-brand-400 transition-colors"
+                    >
                       <Radio className="h-3.5 w-3.5 text-brand-400" />
                       <span>{olt.name}</span>
-                    </span>
+                    </button>
                     <div className="flex items-center space-x-2">
                       <span className="text-[9px] bg-emerald-500/10 text-emerald-400 font-bold px-1.5 py-0.5 rounded">{olt.status || 'Active'}</span>
                       <button 
@@ -493,7 +525,18 @@ const Infrastructure = () => {
                 {odps.length > 0 ? (
                   odps.map(odp => (
                     <tr key={odp.id} className="hover:bg-slate-800/10">
-                      <td className="py-3 px-4 font-bold text-slate-200">{odp.name}</td>
+                      <td className="py-3 px-4 font-bold text-slate-200">
+                        <button 
+                          onClick={() => {
+                            if (odp.latitude && odp.longitude) {
+                              setMapFocus({ lat: parseFloat(odp.latitude), lng: parseFloat(odp.longitude) });
+                            }
+                          }}
+                          className="hover:text-brand-400 transition-colors text-left"
+                        >
+                          {odp.name}
+                        </button>
+                      </td>
                       <td className="py-3 px-4 text-slate-400">
                         {olts.find(o => o.id === odp.olt_id)?.name || 'OLT PONTIANAK CORE'}
                       </td>
@@ -583,12 +626,38 @@ const Infrastructure = () => {
 
               <div className="grid grid-cols-2 gap-4">
                 <div className="space-y-1">
+                  <label className="text-[10px] font-bold text-slate-400 uppercase">Latitude (Opsional)</label>
+                  <input 
+                    type="text" 
+                    value={oltLat}
+                    onChange={(e) => setOltLat(e.target.value)}
+                    placeholder="e.g. -0.0245"
+                    className="w-full input-field font-mono"
+                  />
+                </div>
+
+                <div className="space-y-1">
+                  <label className="text-[10px] font-bold text-slate-400 uppercase">Longitude (Opsional)</label>
+                  <input 
+                    type="text" 
+                    value={oltLng}
+                    onChange={(e) => setOltLng(e.target.value)}
+                    placeholder="e.g. 109.3456"
+                    className="w-full input-field font-mono"
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-1">
                   <label className="text-[10px] font-bold text-slate-400 uppercase">Total PON Ports</label>
                   <select 
                     value={oltPonPorts}
                     onChange={(e) => setOltPonPorts(e.target.value)}
                     className="w-full input-field select-field"
                   >
+                    <option value="1">1 Port</option>
+                    <option value="2">2 Ports</option>
                     <option value="4">4 Ports</option>
                     <option value="8">8 Ports</option>
                     <option value="16">16 Ports</option>
@@ -672,12 +741,38 @@ const Infrastructure = () => {
 
               <div className="grid grid-cols-2 gap-4">
                 <div className="space-y-1">
+                  <label className="text-[10px] font-bold text-slate-400 uppercase">Latitude (Opsional)</label>
+                  <input 
+                    type="text" 
+                    value={editOltLat}
+                    onChange={(e) => setEditOltLat(e.target.value)}
+                    placeholder="e.g. -0.0245"
+                    className="w-full input-field font-mono"
+                  />
+                </div>
+
+                <div className="space-y-1">
+                  <label className="text-[10px] font-bold text-slate-400 uppercase">Longitude (Opsional)</label>
+                  <input 
+                    type="text" 
+                    value={editOltLng}
+                    onChange={(e) => setEditOltLng(e.target.value)}
+                    placeholder="e.g. 109.3456"
+                    className="w-full input-field font-mono"
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-1">
                   <label className="text-[10px] font-bold text-slate-400 uppercase">Total PON Ports</label>
                   <select 
                     value={editOltPonPorts}
                     onChange={(e) => setEditOltPonPorts(e.target.value)}
                     className="w-full input-field select-field"
                   >
+                    <option value="1">1 Port</option>
+                    <option value="2">2 Ports</option>
                     <option value="4">4 Ports</option>
                     <option value="8">8 Ports</option>
                     <option value="16">16 Ports</option>
@@ -759,6 +854,23 @@ const Infrastructure = () => {
                   className="w-full input-field"
                   required
                 />
+              </div>
+
+              <div className="space-y-1">
+                <label className="text-[10px] font-bold text-slate-400 uppercase">Sumber Koneksi Utama (Parent)</label>
+                <select 
+                  value={odpParent}
+                  onChange={(e) => setOdpParent(e.target.value)}
+                  className="w-full input-field select-field"
+                >
+                  <option value="">Langsung ke OLT (Pusat)</option>
+                  {odps.map(o => (
+                    <option key={o.id} value={o.name}>{o.name}</option>
+                  ))}
+                </select>
+                <p className="text-[9px] text-slate-500 italic mt-0.5">
+                  Pilih ODP lain jika kotak ini terhubung secara cascading, atau kosongkan untuk langsung ke OLT.
+                </p>
               </div>
 
               <div className="grid grid-cols-2 gap-4">
@@ -890,6 +1002,20 @@ const Infrastructure = () => {
                   className="w-full input-field"
                   required
                 />
+              </div>
+
+              <div className="space-y-1">
+                <label className="text-[10px] font-bold text-slate-400 uppercase">Sumber Koneksi Utama (Parent)</label>
+                <select 
+                  value={editOdpParent}
+                  onChange={(e) => setEditOdpParent(e.target.value)}
+                  className="w-full input-field select-field"
+                >
+                  <option value="">Langsung ke OLT (Pusat)</option>
+                  {odps.filter(o => o.id !== editingOdpId).map(o => (
+                    <option key={o.id} value={o.name}>{o.name}</option>
+                  ))}
+                </select>
               </div>
 
               <div className="grid grid-cols-2 gap-4">

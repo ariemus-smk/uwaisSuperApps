@@ -112,13 +112,24 @@ async function createPackage(data) {
   const pkg = await packageModel.create(data);
 
   // Sync with RADIUS radgroupreply
+  const groupname = `pkg-${pkg.id}`;
   const rateLimit = `${data.upload_rate_limit}k/${data.download_rate_limit}k ${data.upload_burst_limit}k/${data.download_burst_limit}k ${data.upload_burst_threshold}k/${data.download_burst_threshold}k 60/60 8`;
+  
   await radgroupreplyModel.create({
-    groupname: data.name,
+    groupname,
     attribute: 'Mikrotik-Rate-Limit',
     op: '=',
     value: rateLimit,
   });
+
+  if (data.ip_pool) {
+    await radgroupreplyModel.create({
+      groupname,
+      attribute: 'Framed-Pool',
+      op: '=',
+      value: data.ip_pool,
+    });
+  }
 
   return pkg;
 }
@@ -168,20 +179,12 @@ async function updatePackage(id, data) {
   await packageModel.update(id, data);
 
   // Sync with RADIUS radgroupreply
-  const targetGroupName = data.name || pkg.name;
+  const targetGroupName = `pkg-${id}`;
   const rateLimit = `${merged.upload_rate_limit}k/${merged.download_rate_limit}k ${merged.upload_burst_limit}k/${merged.download_burst_limit}k ${merged.upload_burst_threshold}k/${merged.download_burst_threshold}k 60/60 8`;
 
-  if (data.name && data.name !== pkg.name) {
-    // Package name changed, update all radgroupreply records for this group
-    const replies = await radgroupreplyModel.findByGroupname(pkg.name);
-    for (const reply of replies) {
-      await radgroupreplyModel.update(reply.id, { groupname: targetGroupName });
-    }
-  }
-
-  const existingReply = await radgroupreplyModel.findByGroupnameAndAttribute(targetGroupName, 'Mikrotik-Rate-Limit');
-  if (existingReply) {
-    await radgroupreplyModel.update(existingReply.id, { value: rateLimit });
+  const existingRateLimit = await radgroupreplyModel.findByGroupnameAndAttribute(targetGroupName, 'Mikrotik-Rate-Limit');
+  if (existingRateLimit) {
+    await radgroupreplyModel.update(existingRateLimit.id, { value: rateLimit });
   } else {
     await radgroupreplyModel.create({
       groupname: targetGroupName,
@@ -189,6 +192,24 @@ async function updatePackage(id, data) {
       op: '=',
       value: rateLimit,
     });
+  }
+
+  const currentIpPool = data.ip_pool !== undefined ? data.ip_pool : pkg.ip_pool;
+  const existingPool = await radgroupreplyModel.findByGroupnameAndAttribute(targetGroupName, 'Framed-Pool');
+  
+  if (currentIpPool) {
+    if (existingPool) {
+      await radgroupreplyModel.update(existingPool.id, { value: currentIpPool });
+    } else {
+      await radgroupreplyModel.create({
+        groupname: targetGroupName,
+        attribute: 'Framed-Pool',
+        op: '=',
+        value: currentIpPool,
+      });
+    }
+  } else if (existingPool) {
+    await radgroupreplyModel.deleteById(existingPool.id);
   }
 
   return packageModel.findById(id);
@@ -226,7 +247,7 @@ async function deletePackage(id) {
   await packageModel.deleteById(id);
 
   // Remove from RADIUS
-  await radgroupreplyModel.deleteByGroupname(pkg.name);
+  await radgroupreplyModel.deleteByGroupname(`pkg-${id}`);
 }
 
 module.exports = {

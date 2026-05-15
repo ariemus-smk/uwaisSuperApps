@@ -32,13 +32,14 @@ async function create(odpData) {
     olt_id,
     olt_pon_port,
     branch_id,
+    parent = null,
     status = 'Active',
   } = odpData;
 
   const [result] = await appPool.execute(
-    `INSERT INTO odps (name, latitude, longitude, total_ports, used_ports, olt_id, olt_pon_port, branch_id, status, created_at, updated_at)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, NOW(), NOW())`,
-    [name, latitude, longitude, total_ports, used_ports, olt_id, olt_pon_port, branch_id, status]
+    `INSERT INTO odps (name, latitude, longitude, total_ports, used_ports, olt_id, olt_pon_port, branch_id, parent, status, created_at, updated_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW(), NOW())`,
+    [name, latitude, longitude, total_ports, used_ports, olt_id, olt_pon_port, branch_id, parent || null, status]
   );
 
   return {
@@ -51,6 +52,7 @@ async function create(odpData) {
     olt_id,
     olt_pon_port,
     branch_id,
+    parent: parent || null,
     status,
   };
 }
@@ -122,14 +124,18 @@ async function findAll(filters = {}) {
  * @returns {Promise<object>} Query result
  */
 async function update(id, data) {
-  const allowedFields = ['name', 'latitude', 'longitude', 'total_ports', 'used_ports', 'olt_id', 'olt_pon_port', 'branch_id', 'status'];
+  const allowedFields = ['name', 'latitude', 'longitude', 'total_ports', 'used_ports', 'olt_id', 'olt_pon_port', 'branch_id', 'status', 'parent'];
   const setClauses = [];
   const params = [];
 
   for (const field of allowedFields) {
     if (data[field] !== undefined) {
       setClauses.push(`${field} = ?`);
-      params.push(data[field]);
+      if (field === 'parent' && data[field] === '') {
+        params.push(null);
+      } else {
+        params.push(data[field]);
+      }
     }
   }
 

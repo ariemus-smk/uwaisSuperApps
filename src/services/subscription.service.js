@@ -39,8 +39,8 @@ async function listSubscriptions(filters = {}, user = {}) {
     limit,
   };
 
-  // Apply branch scoping
-  if (user.branch_id) {
+  // Apply branch scoping (Only if not Superadmin)
+  if (user.role !== 'Superadmin' && user.branch_id) {
     queryFilters.branch_id = user.branch_id;
   }
 
@@ -107,8 +107,6 @@ async function create(customerId, packageId, nasId) {
   const isUsernameUnique = createRadcheckUniquenessChecker(radiusPool);
   const { username, password } = await generatePPPoECredentials({
     isUsernameUnique,
-    prefix: 'uwais-',
-    passwordLength: 12,
     maxAttempts: 10,
   });
 
@@ -298,6 +296,34 @@ async function updateSubscription(id, data) {
   return subscriptionModel.findByIdWithDetails(id);
 }
 
+/**
+ * Delete a subscription.
+ * Removes the account from RADIUS and deletes the record from the app database.
+ * @param {number} id - Subscription ID
+ * @returns {Promise<boolean>} True if deleted
+ * @throws {Error} If subscription not found
+ */
+async function deleteSubscription(id) {
+  const subscription = await subscriptionModel.findById(id);
+
+  if (!subscription) {
+    throw Object.assign(new Error('Subscription not found.'), {
+      statusCode: 404,
+      code: ERROR_CODE.RESOURCE_NOT_FOUND,
+    });
+  }
+
+  // 1. Remove from RADIUS if username exists
+  if (subscription.pppoe_username) {
+    await radiusService.removeUser(subscription.pppoe_username);
+  }
+
+  // 2. Delete from App DB
+  await subscriptionModel.remove(id);
+
+  return true;
+}
+
 module.exports = {
   listSubscriptions,
   getSubscriptionById,
@@ -305,4 +331,5 @@ module.exports = {
   activate,
   install,
   updateSubscription,
+  deleteSubscription,
 };

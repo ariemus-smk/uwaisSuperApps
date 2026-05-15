@@ -34,6 +34,7 @@ const PackagesPage = () => {
   const [fupUploadSpeed, setFupUploadSpeed] = useState('');
   const [fupDownloadSpeed, setFupDownloadSpeed] = useState('');
   const [status, setStatus] = useState('Active');
+  const [ipPool, setIpPool] = useState('');
   
   // Edit State
   const [editingPackageId, setEditingPackageId] = useState(null);
@@ -108,7 +109,8 @@ const PackagesPage = () => {
         fup_quota_gb: fupEnabled && fupQuotaGb ? Number(fupQuotaGb) : null,
         fup_upload_speed: fupEnabled && fupUploadSpeed ? Number(fupUploadSpeed) : null,
         fup_download_speed: fupEnabled && fupDownloadSpeed ? Number(fupDownloadSpeed) : null,
-        status
+        status,
+        ip_pool: ipPool || null
       };
 
       const response = await axios.post('/api/packages', payload);
@@ -131,6 +133,7 @@ const PackagesPage = () => {
         setFupUploadSpeed('');
         setFupDownloadSpeed('');
         setStatus('Active');
+        setIpPool('');
 
         setTimeout(() => {
           setFormSuccess(false);
@@ -162,6 +165,7 @@ const PackagesPage = () => {
     setFupUploadSpeed(p.fup_upload_speed || '');
     setFupDownloadSpeed(p.fup_download_speed || '');
     setStatus(p.status || 'Active');
+    setIpPool(p.ip_pool || '');
     setErrorMessage('');
     setShowEditModal(true);
   };
@@ -190,7 +194,8 @@ const PackagesPage = () => {
         fup_quota_gb: fupEnabled && fupQuotaGb ? Number(fupQuotaGb) : null,
         fup_upload_speed: fupEnabled && fupUploadSpeed ? Number(fupUploadSpeed) : null,
         fup_download_speed: fupEnabled && fupDownloadSpeed ? Number(fupDownloadSpeed) : null,
-        status
+        status,
+        ip_pool: ipPool || null
       };
 
       const response = await axios.put(`/api/packages/${editingPackageId}`, payload);
@@ -365,21 +370,32 @@ const PackagesPage = () => {
                   </div>
                 </div>
 
-                {/* Additional Settings (PPN, FUP, Burst) info */}
+                {/* Additional Settings (PPN, FUP, Burst, IP Pool) info */}
                 <div className="border-t border-slate-900 pt-3.5 space-y-2 text-[10px] font-medium text-slate-400">
                   <div className="flex justify-between items-center">
-                    <span className="text-slate-500">PPN 11% Tax Invoice</span>
+                    <span className="text-slate-500 font-semibold">PPN 11% Tax Invoice</span>
                     <span className={`px-2 py-0.5 rounded-full font-bold uppercase ${p.ppn_enabled ? 'bg-emerald-500/10 text-emerald-400' : 'bg-slate-900 text-slate-600'}`}>
                       {p.ppn_enabled ? 'Sesuai' : 'Bebas PPN'}
                     </span>
                   </div>
 
                   <div className="flex justify-between items-center">
-                    <span className="text-slate-500">FUP Quota Policy</span>
+                    <span className="text-slate-500 font-semibold">FUP Quota Policy</span>
                     <span className={`px-2 py-0.5 rounded-full font-bold uppercase ${p.fup_enabled ? 'bg-amber-500/10 text-amber-400' : 'bg-slate-900 text-slate-600'}`}>
                       {p.fup_enabled ? `FUP (${p.fup_quota_gb} GB)` : 'Unlimited'}
                     </span>
                   </div>
+
+                  {/* IP Pool info */}
+                  {p.ip_pool && (
+                    <div className="flex justify-between items-center">
+                      <span className="text-slate-500 font-semibold">IP Pool</span>
+                      <span className="bg-slate-900 border border-slate-800 text-[10px] font-mono font-bold text-slate-300 px-2 py-0.5 rounded-md flex items-center space-x-1">
+                        <HardDrive className="h-3 w-3 text-brand-400" />
+                        <span>{p.ip_pool}</span>
+                      </span>
+                    </div>
+                  )}
 
                   {/* Throttled FUP rates if FUP active */}
                   {p.fup_enabled && (
@@ -598,6 +614,18 @@ const PackagesPage = () => {
                         <option value="Active">Aktif (Active)</option>
                         <option value="Inactive">Nonaktif (Inactive)</option>
                       </select>
+                    </div>
+
+                    {/* IP Pool field */}
+                    <div className="space-y-1">
+                      <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">IP Pool (Optional)</label>
+                      <input 
+                        type="text" 
+                        placeholder="e.g. pool-pppoe"
+                        value={ipPool}
+                        onChange={(e) => setIpPool(e.target.value)}
+                        className="w-full input-field text-xs" 
+                      />
                     </div>
 
                     {/* Tax switch */}
@@ -864,6 +892,18 @@ const PackagesPage = () => {
                         <option value="Active">Aktif (Active)</option>
                         <option value="Inactive">Nonaktif (Inactive)</option>
                       </select>
+                    </div>
+
+                    {/* IP Pool field */}
+                    <div className="space-y-1">
+                      <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">IP Pool (Optional)</label>
+                      <input 
+                        type="text" 
+                        placeholder="e.g. pool-pppoe"
+                        value={ipPool}
+                        onChange={(e) => setIpPool(e.target.value)}
+                        className="w-full input-field text-xs" 
+                      />
                     </div>
 
                     {/* Tax switch */}

@@ -274,6 +274,23 @@ async function deletePPPoEAccount(username) {
   };
 }
 
+/**
+ * Remove a user from all RADIUS tables (radcheck, radusergroup, radreply).
+ * @param {string} username - PPPoE username
+ * @returns {Promise<boolean>} True if successful
+ */
+async function removeUser(username) {
+  if (!username) return false;
+
+  await Promise.all([
+    radcheckModel.deleteByUsername(username),
+    raduserGroupModel.deleteByUsername(username),
+    radreplyModel.deleteByUsername(username),
+  ]);
+
+  return true;
+}
+
 module.exports = {
   createPPPoEAccount,
   updateUserGroup,
@@ -282,4 +299,5 @@ module.exports = {
   removeIsolirProfile,
   resetFUPProfile,
   deletePPPoEAccount,
+  removeUser,
 };

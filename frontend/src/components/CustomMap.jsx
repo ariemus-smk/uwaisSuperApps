@@ -9,7 +9,11 @@ const CustomMap = ({
   selectedOdp,
   markerPosition = { lat: -0.0263, lng: 109.3425 }, // Kalimantan Barat (Pontianak)
   interactive = true,
-  searchCoords
+  searchCoords,
+  olts = [],
+  odps = [],
+  focusCoords = null,
+  loading = false
 }) => {
   const mapContainerRef = useRef(null);
   const mapInstanceRef = useRef(null);
@@ -18,11 +22,6 @@ const CustomMap = ({
   const markersLayerRef = useRef(L.layerGroup());
   const linesLayerRef = useRef(L.layerGroup());
   
-  // Real database-backed list of OLTs and ODPs
-  const [olts, setOlts] = useState([]);
-  const [odps, setOdps] = useState([]);
-  const [loading, setLoading] = useState(false);
-
   // Core OLT position (Pontianak center office)
   const oltCenter = { lat: -0.0263, lng: 109.3425, name: 'OLT PONTIANAK CENTRAL' };
 
@@ -32,33 +31,6 @@ const CustomMap = ({
   const [nearestOdp, setNearestOdp] = useState(null);
   const [selectedPort, setSelectedPort] = useState(null);
   const [activeOdp, setActiveOdp] = useState(null);
-
-  // Fetch real infrastructure data from API
-  const fetchInfrastructure = async () => {
-    setLoading(true);
-    try {
-      const [oltsRes, odpsRes] = await Promise.all([
-        axios.get('/api/infrastructure/olts'),
-        axios.get('/api/infrastructure/odps')
-      ]);
-
-      if (oltsRes.data && oltsRes.data.status === 'success') {
-        setOlts(oltsRes.data.data || []);
-      }
-      if (odpsRes.data && odpsRes.data.status === 'success') {
-        setOdps(odpsRes.data.data || []);
-      }
-    } catch (err) {
-      console.error('Failed to load real infrastructure data:', err);
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  // Sync / initialize infrastructure data on load
-  useEffect(() => {
-    fetchInfrastructure();
-  }, []);
 
   // Initialize Map
   useEffect(() => {
@@ -186,6 +158,10 @@ const CustomMap = ({
 
     // 1. ADD OLT CORE MARKERS
     olts.forEach(olt => {
+      // Use real coordinates if available, otherwise fallback to center office
+      const lat = olt.latitude || oltCenter.lat;
+      const lng = olt.longitude || oltCenter.lng;
+
       const oltIcon = L.divIcon({
         html: `
           <div class="flex flex-col items-center justify-center relative">
@@ -203,15 +179,34 @@ const CustomMap = ({
         iconAnchor: [16, 22]
       });
 
-      L.marker([oltCenter.lat, oltCenter.lng], { icon: oltIcon }).addTo(markersLayerRef.current);
+      L.marker([lat, lng], { icon: oltIcon }).addTo(markersLayerRef.current);
     });
 
     // 2. ADD REAL DB ODP MARKERS & FIBER CABLING POLYLINES
     odps.forEach(odp => {
       if (!odp.latitude || !odp.longitude) return;
 
-      // Draw fiber link from Central OLT to ODP box
-      L.polyline([[oltCenter.lat, oltCenter.lng], [odp.latitude, odp.longitude]], {
+      // Determine connection source (Cascading ODP or parent OLT)
+      let startLat, startLng;
+      
+      if (odp.parent) {
+        // Find parent ODP by name
+        const parentOdp = odps.find(o => o.name === odp.parent);
+        if (parentOdp && parentOdp.latitude && parentOdp.longitude) {
+          startLat = parentOdp.latitude;
+          startLng = parentOdp.longitude;
+        }
+      }
+
+      // Fallback to OLT if no parent ODP or parent ODP not found/no coords
+      if (!startLat || !startLng) {
+        const parentOlt = olts.find(o => o.id === odp.olt_id);
+        startLat = parentOlt?.latitude || oltCenter.lat;
+        startLng = parentOlt?.longitude || oltCenter.lng;
+      }
+
+      // Draw fiber link from source to ODP box
+      L.polyline([[startLat, startLng], [odp.latitude, odp.longitude]], {
         color: '#8b5cf6',
         weight: 1.5,
         dashArray: '5, 5',
@@ -298,6 +293,19 @@ const CustomMap = ({
       triggerCoverageQuery();
     }
   }, [searchCoords]);
+
+  // Handle focusing from parent (list click)
+  useEffect(() => {
+    if (focusCoords && mapInstanceRef.current) {
+      const latLng = [focusCoords.lat, focusCoords.lng];
+      mapInstanceRef.current.setView(latLng, 16, { animate: true });
+      
+      // Also update target position to match focus
+      setTargetPos(focusCoords);
+      if (targetMarkerRef.current) targetMarkerRef.current.setLatLng(latLng);
+      if (coverageCircleRef.current) coverageCircleRef.current.setLatLng(latLng);
+    }
+  }, [focusCoords]);
 
   const handlePortClick = (portNum, odp) => {
     // Basic validation

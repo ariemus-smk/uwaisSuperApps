@@ -85,10 +85,12 @@ async function findAll(filters = {}) {
   let countQuery = `SELECT COUNT(*) as total FROM subscriptions s
     LEFT JOIN customers c ON s.customer_id = c.id WHERE 1=1`;
   let dataQuery = `SELECT s.*, c.full_name AS customer_name, c.branch_id,
-    p.name AS package_name
+    p.name AS package_name,
+    o.name AS odp_name
     FROM subscriptions s
     LEFT JOIN customers c ON s.customer_id = c.id
     LEFT JOIN packages p ON s.package_id = p.id
+    LEFT JOIN odps o ON s.odp_id = o.id
     WHERE 1=1`;
   const params = [];
 
@@ -241,6 +243,19 @@ async function countByCustomer(customerId) {
   return rows[0].count;
 }
 
+/**
+ * Delete a subscription record.
+ * @param {number} id - Subscription ID
+ * @returns {Promise<object>} Query result
+ */
+async function remove(id) {
+  const [result] = await appPool.execute(
+    'DELETE FROM subscriptions WHERE id = ?',
+    [id]
+  );
+  return result;
+}
+
 module.exports = {
   findById,
   findByIdWithDetails,
@@ -249,6 +264,7 @@ module.exports = {
   findAll,
   create,
   update,
+  remove,
   countByPackage,
   countByCustomer,
 };
