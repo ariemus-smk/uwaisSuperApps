@@ -12,6 +12,8 @@ const radacctModel = require('../radiusModels/radacct.model');
 const { generateNasScript } = require('../utils/mikrotikScript');
 const { ERROR_CODE, NAS_POLL_STATUS } = require('../utils/constants');
 const { v4: uuidv4 } = require('uuid');
+const axios = require('axios');
+const https = require('https');
 
 // In-memory store for tracking active outages (nasId -> outage start timestamp)
 // This is used to calculate downtime duration on recovery
@@ -82,7 +84,7 @@ async function register(nasData) {
       ovpn: { ...vpnAccounts.ovpn, server: vpnServer, port: parseInt(process.env.VPN_OVPN_PORT, 10) || 1194 },
     },
     radiusSecret: radius_secret,
-    radiusServer: '10.255.255.1',
+    radiusServer: process.env.RADIUS_SERVER_IP || process.env.RADIUS_DB_HOST || '10.255.255.1',
     radiusAuthPort: 1812,
     radiusAcctPort: 1813,
     coaPort: 3799,
@@ -160,7 +162,7 @@ async function generateScript(nasId) {
       ovpn: { ...vpnAccounts.ovpn, server: vpnServer, port: parseInt(process.env.VPN_OVPN_PORT, 10) || 1194 },
     },
     radiusSecret: nas.radius_secret,
-    radiusServer: '10.255.255.1',
+    radiusServer: process.env.RADIUS_SERVER_IP || process.env.RADIUS_DB_HOST || '10.255.255.1',
     radiusAuthPort: 1812,
     radiusAcctPort: 1813,
     coaPort: 3799,
@@ -209,7 +211,7 @@ async function testConnectivity(nasId) {
     result.diagnostics.push(`API connectivity test failed: ${err.message}`);
   }
 
-  // Test RADIUS connectivity (RADIUS runs as UDP on the central server, so if NAS API is reachable via VPN, RADIUS is online)
+  // Test RADIUS connectivity
   try {
     result.radiusReachable = result.apiReachable;
     if (result.radiusReachable) {
@@ -234,6 +236,24 @@ async function testConnectivity(nasId) {
     result.status = 'Active';
     await nasModel.updateStatus(nasId, 'Active');
     await nasModel.updatePollStatus(nasId, NAS_POLL_STATUS.UP);
+
+    // Fetch Mikrotik stats if credentials exist
+    if (nas.mikrotik_username && nas.mikrotik_password) {
+      const stats = await fetchMikrotikStats(nas.ip_address, nas.mikrotik_username, nas.mikrotik_password);
+      if (stats) {
+        await nasModel.update(nasId, {
+          cpu_load: stats.cpuLoad,
+          memory_usage: stats.memoryUsage,
+          uptime: stats.uptime,
+          active_sessions: stats.activeSessions
+        });
+        result.diagnostics.push(`Fetched Live Stats - CPU: ${stats.cpuLoad}%, RAM: ${stats.memoryUsage}%`);
+      } else {
+        result.diagnostics.push('Mikrotik REST API unreachable or auth failed.');
+      }
+    } else {
+      result.diagnostics.push('Missing mikrotik credentials for live stats.');
+    }
   } else {
     result.status = 'Inactive';
     await nasModel.updateStatus(nasId, 'Inactive');
@@ -244,6 +264,46 @@ async function testConnectivity(nasId) {
   }
 
   return result;
+}
+
+/**
+ * Fetch live monitoring stats from Mikrotik RouterOS 7 REST API.
+ */
+async function fetchMikrotikStats(ip, username, password) {
+  const agent = new https.Agent({ rejectUnauthorized: false });
+  const auth = { username, password };
+
+  try {
+    const res = await axios.get(`http://${ip}/rest/system/resource`, { auth, timeout: 4000 });
+    const ppp = await axios.get(`http://${ip}/rest/ppp/active`, { auth, timeout: 4000 });
+
+    const totalMem = res.data['total-memory'] || 1;
+    const freeMem = res.data['free-memory'] || 0;
+
+    return {
+      cpuLoad: res.data['cpu-load'] || 0,
+      memoryUsage: Math.round(((totalMem - freeMem) / totalMem) * 100),
+      uptime: res.data.uptime || '',
+      activeSessions: Array.isArray(ppp.data) ? ppp.data.length : 0
+    };
+  } catch (err) {
+    try {
+      const res = await axios.get(`https://${ip}/rest/system/resource`, { auth, httpsAgent: agent, timeout: 4000 });
+      const ppp = await axios.get(`https://${ip}/rest/ppp/active`, { auth, httpsAgent: agent, timeout: 4000 });
+
+      const totalMem = res.data['total-memory'] || 1;
+      const freeMem = res.data['free-memory'] || 0;
+
+      return {
+        cpuLoad: res.data['cpu-load'] || 0,
+        memoryUsage: Math.round(((totalMem - freeMem) / totalMem) * 100),
+        uptime: res.data.uptime || '',
+        activeSessions: Array.isArray(ppp.data) ? ppp.data.length : 0
+      };
+    } catch (err2) {
+      return null;
+    }
+  }
 }
 
 /**
@@ -438,6 +498,20 @@ async function pollAllNas() {
         } catch (err) {
           // Non-critical: continue even if session count fails
           activeSessions = nas.active_sessions || 0;
+        }
+
+        // Fetch Mikrotik hardware stats
+        if (nas.mikrotik_username && nas.mikrotik_password) {
+          const stats = await fetchMikrotikStats(nas.ip_address, nas.mikrotik_username, nas.mikrotik_password);
+          if (stats) {
+            await nasModel.update(nas.id, {
+              cpu_load: stats.cpuLoad,
+              memory_usage: stats.memoryUsage,
+              uptime: stats.uptime,
+              // We prioritize RADIUS active sessions, but fallback to router's count
+              active_sessions: activeSessions > 0 ? activeSessions : stats.activeSessions
+            });
+          }
         }
       }
 

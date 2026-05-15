@@ -85,9 +85,9 @@ const NasPage = () => {
     return {
       ...nas,
       status: mon?.status || nas.status || 'Offline',
-      cpuLoad: mon?.cpuLoad ?? null,
-      memoryUsage: mon?.memoryUsage ?? null,
-      activeSessions: mon?.activeSessions ?? 0,
+      cpuLoad: mon?.cpu_load ?? null,
+      memoryUsage: mon?.memory_usage ?? null,
+      activeSessions: mon?.active_sessions ?? 0,
       uptime: mon?.uptime || null
     };
   });

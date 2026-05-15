@@ -10,6 +10,14 @@ jest.mock('../../src/config/database', () => ({
   },
 }));
 
+jest.mock('../../src/radiusModels/radgroupreply.model', () => ({
+  create: jest.fn().mockResolvedValue({ id: 1 }),
+  update: jest.fn().mockResolvedValue({ affectedRows: 1 }),
+  findByGroupname: jest.fn().mockResolvedValue([]),
+  findByGroupnameAndAttribute: jest.fn().mockResolvedValue(null),
+  deleteByGroupname: jest.fn().mockResolvedValue({ affectedRows: 1 })
+}));
+
 const { appPool } = require('../../src/config/database');
 const packageService = require('../../src/services/package.service');
 

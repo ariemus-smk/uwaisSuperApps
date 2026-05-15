@@ -136,7 +136,7 @@ async function findAll(filters = {}) {
  * @returns {Promise<object>} Query result
  */
 async function update(id, data) {
-  const allowedFields = ['name', 'ip_address', 'radius_secret', 'api_port', 'mikrotik_username', 'mikrotik_password', 'branch_id', 'vpn_accounts', 'config_script', 'active_sessions'];
+  const allowedFields = ['name', 'ip_address', 'radius_secret', 'api_port', 'mikrotik_username', 'mikrotik_password', 'branch_id', 'vpn_accounts', 'config_script', 'active_sessions', 'cpu_load', 'memory_usage', 'uptime'];
   const setClauses = [];
   const params = [];
 

@@ -8,7 +8,7 @@ export const AuthProvider = ({ children }) => {
   const [token, setToken] = useState(localStorage.getItem('accessToken') || null);
   const [loading, setLoading] = useState(true);
 
-  // Setup Axios defaults
+  // Setup Axios defaults and interceptors
   useEffect(() => {
     if (token) {
       axios.defaults.headers.common['Authorization'] = `Bearer ${token}`;
@@ -17,6 +17,26 @@ export const AuthProvider = ({ children }) => {
       delete axios.defaults.headers.common['Authorization'];
       localStorage.removeItem('accessToken');
     }
+
+    // Add a global response interceptor to catch 401 Unauthorized errors
+    const responseInterceptor = axios.interceptors.response.use(
+      (response) => response,
+      (error) => {
+        // Force logout if token is expired or request is unauthorized
+        if (error.response?.status === 401 || (error.response?.data?.message && error.response.data.message.toLowerCase().includes('token'))) {
+          localStorage.removeItem('accessToken');
+          localStorage.removeItem('refreshToken');
+          localStorage.removeItem('user');
+          window.location.href = '/login';
+        }
+        return Promise.reject(error);
+      }
+    );
+
+    // Cleanup interceptor
+    return () => {
+      axios.interceptors.response.eject(responseInterceptor);
+    };
   }, [token]);
 
   // Load user profile on mount if token exists

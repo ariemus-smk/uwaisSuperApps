@@ -5,6 +5,7 @@
  */
 
 const packageModel = require('../models/package.model');
+const radgroupreplyModel = require('../radiusModels/radgroupreply.model');
 const { PACKAGE_STATUS, ERROR_CODE } = require('../utils/constants');
 
 /**
@@ -109,6 +110,16 @@ async function createPackage(data) {
   }
 
   const pkg = await packageModel.create(data);
+
+  // Sync with RADIUS radgroupreply
+  const rateLimit = `${data.upload_rate_limit}k/${data.download_rate_limit}k ${data.upload_burst_limit}k/${data.download_burst_limit}k ${data.upload_burst_threshold}k/${data.download_burst_threshold}k 60/60 8`;
+  await radgroupreplyModel.create({
+    groupname: data.name,
+    attribute: 'Mikrotik-Rate-Limit',
+    op: '=',
+    value: rateLimit,
+  });
+
   return pkg;
 }
 
@@ -156,6 +167,30 @@ async function updatePackage(id, data) {
 
   await packageModel.update(id, data);
 
+  // Sync with RADIUS radgroupreply
+  const targetGroupName = data.name || pkg.name;
+  const rateLimit = `${merged.upload_rate_limit}k/${merged.download_rate_limit}k ${merged.upload_burst_limit}k/${merged.download_burst_limit}k ${merged.upload_burst_threshold}k/${merged.download_burst_threshold}k 60/60 8`;
+
+  if (data.name && data.name !== pkg.name) {
+    // Package name changed, update all radgroupreply records for this group
+    const replies = await radgroupreplyModel.findByGroupname(pkg.name);
+    for (const reply of replies) {
+      await radgroupreplyModel.update(reply.id, { groupname: targetGroupName });
+    }
+  }
+
+  const existingReply = await radgroupreplyModel.findByGroupnameAndAttribute(targetGroupName, 'Mikrotik-Rate-Limit');
+  if (existingReply) {
+    await radgroupreplyModel.update(existingReply.id, { value: rateLimit });
+  } else {
+    await radgroupreplyModel.create({
+      groupname: targetGroupName,
+      attribute: 'Mikrotik-Rate-Limit',
+      op: '=',
+      value: rateLimit,
+    });
+  }
+
   return packageModel.findById(id);
 }
 
@@ -189,6 +224,9 @@ async function deletePackage(id) {
   }
 
   await packageModel.deleteById(id);
+
+  // Remove from RADIUS
+  await radgroupreplyModel.deleteByGroupname(pkg.name);
 }
 
 module.exports = {
