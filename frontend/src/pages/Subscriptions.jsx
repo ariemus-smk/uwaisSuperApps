@@ -16,14 +16,19 @@ const Subscriptions = () => {
   const [step, setStep] = useState(1);
 
   // Wizard state values
-  const [selectedCustId, setSelectedCustId] = useState(102); // Siti Rahayu (Instalasi)
-  const [selectedPackId, setSelectedPackId] = useState(1);
-  const [nasId, setNasId] = useState(1);
+  const [selectedCustId, setSelectedCustId] = useState('');
+  const [selectedPackId, setSelectedPackId] = useState('');
+  const [nasId, setNasId] = useState('');
   const [odpId, setOdpId] = useState(null);
   const [odpName, setOdpName] = useState('');
   const [odpPort, setOdpPort] = useState(null);
   const [onuSn, setOnuSn] = useState('');
   const [onuMac, setOnuMac] = useState('');
+
+  // Dropdown lists
+  const [customersList, setCustomersList] = useState([]);
+  const [packagesList, setPackagesList] = useState([]);
+  const [nasList, setNasList] = useState([]);
 
   // Generated results simulation
   const [generatedUser, setGeneratedUser] = useState('');
@@ -31,12 +36,6 @@ const Subscriptions = () => {
   const [generatedInvoice, setGeneratedInvoice] = useState('');
 
   const [subscriptions, setSubscriptions] = useState([]);
-
-  const packages = [
-    { id: 1, name: 'Broadband Home 20M', speed: '20 Mbps', price: 'Rp 222,000' },
-    { id: 2, name: 'SOHO Office 50M', speed: '50 Mbps', price: 'Rp 499,000' },
-    { id: 3, name: 'Dedicated Business 100M', speed: '100 Mbps', price: 'Rp 1,500,000' }
-  ];
 
   // Fetch from real subscription endpoint
   const fetchSubscriptions = async () => {
@@ -67,6 +66,39 @@ const Subscriptions = () => {
     fetchSubscriptions();
   }, []);
 
+  useEffect(() => {
+    if (showWizard) {
+      const loadWizardData = async () => {
+        try {
+          const [custRes, packRes, nasRes] = await Promise.all([
+            axios.get('/api/customers', { params: { lifecycle_status: 'Instalasi', limit: 100 } }),
+            axios.get('/api/packages'),
+            axios.get('/api/nas', { params: { limit: 100 } })
+          ]);
+
+          if (custRes.data?.status === 'success') {
+            const arr = custRes.data.data?.customers || custRes.data.data || [];
+            setCustomersList(arr);
+            if (arr.length > 0) setSelectedCustId(arr[0].id);
+          }
+          if (packRes.data?.status === 'success') {
+            const arr = packRes.data.data?.packages || packRes.data.data || [];
+            setPackagesList(arr);
+            if (arr.length > 0) setSelectedPackId(arr[0].id);
+          }
+          if (nasRes.data?.status === 'success') {
+            const arr = nasRes.data.data?.nas || nasRes.data.data?.devices || nasRes.data.data || [];
+            setNasList(arr);
+            if (arr.length > 0) setNasId(arr[0].id);
+          }
+        } catch (err) {
+          console.error('Failed to load wizard options', err);
+        }
+      };
+      loadWizardData();
+    }
+  }, [showWizard]);
+
   const handleMapSelection = (latLng) => {
     // Selected coordinates
   };
@@ -78,39 +110,49 @@ const Subscriptions = () => {
   };
 
   const executeActivation = async () => {
-    if (!odpPort || !onuSn || !onuMac) {
-      alert('Selesaikan mapping ODP & input SN/MAC ONU terlebih dahulu!');
+    if (!odpPort || !onuSn || !onuMac || !selectedCustId || !selectedPackId || !nasId) {
+      alert('Selesaikan mapping ODP & input SN/MAC ONU terlebih dahulu! Pastikan semua field sudah terisi.');
       return;
     }
 
     setLoading(true);
     setErrorMessage('');
     try {
-      const payload = {
-        odp_id: odpId,
-        odp_port: odpPort,
+      // 1. Create Subscription
+      const subPayload = {
+        customer_id: Number(selectedCustId),
+        package_id: Number(selectedPackId),
+        nas_id: Number(nasId)
+      };
+      const createRes = await axios.post('/api/subscriptions', subPayload);
+      if (createRes.data?.status !== 'success') throw new Error('Gagal membuat subskripsi');
+      const subId = createRes.data.data.id;
+
+      // 2. Submit Installation Data
+      const installPayload = {
+        odp_id: Number(odpId),
+        odp_port: Number(odpPort),
         onu_serial_number: onuSn,
         onu_mac_address: onuMac,
         install_latitude: -1.2654,
         install_longitude: 116.8312
       };
+      const installRes = await axios.post(`/api/subscriptions/${subId}/installation`, installPayload);
+      if (installRes.data?.status !== 'success') throw new Error('Gagal menyimpan instalasi');
 
-      // Call real installation API: POST /api/subscriptions/:id/installation
-      const response = await axios.post(`/api/subscriptions/${selectedCustId}/installation`, payload);
-      
-      if (response.data && response.data.status === 'success') {
-        const subData = response.data.data;
-        setGeneratedUser(subData?.pppoe_username || 'uwais-user');
-        setGeneratedPass(subData?.pppoe_password || 'uwais-password');
-        setGeneratedInvoice(`INV-${subData?.id || Date.now()}`);
+      // 3. Activate Subscription
+      const activateRes = await axios.post(`/api/subscriptions/${subId}/activate`);
+      if (activateRes.data?.status !== 'success') throw new Error('Gagal mengaktifkan koneksi PPPoE');
 
-        await fetchSubscriptions();
-        setStep(3);
-      } else {
-        throw new Error(response.data?.message || "Activation rejected");
-      }
+      const subData = activateRes.data.data;
+      setGeneratedUser(subData?.pppoe_username || 'uwais-user');
+      setGeneratedPass(subData?.pppoe_password || 'uwais-password');
+      setGeneratedInvoice(`INV-${subData?.id || Date.now()}`);
+
+      await fetchSubscriptions();
+      setStep(3);
     } catch (err) {
-      console.error("Direct POST activation failed:", err);
+      console.error("Activation flow failed:", err);
       const msg = err.response?.data?.message || err.message || "Aktivasi gagal";
       alert(`Gagal mengaktivasi koneksi: ${msg}`);
       setErrorMessage(msg);
@@ -161,16 +203,18 @@ const Subscriptions = () => {
           {/* STEP 1: SELECT CUSTOMER & PACKAGE */}
           {step === 1 && (
             <div className="space-y-4">
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                 <div className="space-y-1.5">
                   <label className="text-xs font-bold text-slate-400">Pilih Calon Pelanggan (Status Instalasi)</label>
                   <select 
                     value={selectedCustId} 
-                    onChange={(e) => setSelectedCustId(Number(e.target.value))}
+                    onChange={(e) => setSelectedCustId(e.target.value)}
                     className="w-full input-field text-xs bg-slate-950"
                   >
-                    <option value={102}>Siti Rahayu (Instalasi) - Jl. MT Haryono No 45</option>
-                    <option value={103}>Andi Wijaya (Prospek) - Perum Balikpapan Baru</option>
+                    {customersList.length === 0 && <option value="">-- Tidak ada pelanggan Instalasi --</option>}
+                    {customersList.map(c => (
+                      <option key={c.id} value={c.id}>{c.full_name} ({c.code || `ID:${c.id}`})</option>
+                    ))}
                   </select>
                 </div>
 
@@ -178,11 +222,32 @@ const Subscriptions = () => {
                   <label className="text-xs font-bold text-slate-400">Pilih Paket Berlangganan</label>
                   <select 
                     value={selectedPackId} 
-                    onChange={(e) => setSelectedPackId(Number(e.target.value))}
+                    onChange={(e) => setSelectedPackId(e.target.value)}
                     className="w-full input-field text-xs bg-slate-950"
                   >
-                    {packages.map(p => (
-                      <option key={p.id} value={p.id}>{p.name} ({p.speed} - {p.price})</option>
+                    {packagesList.length === 0 && <option value="">-- Tidak ada paket aktif --</option>}
+                    {packagesList.map(p => {
+                      const price = Number(p.monthly_price) || 0;
+                      const speed = p.download_rate_limit ? Math.round(p.download_rate_limit / 1000) : 0;
+                      return (
+                        <option key={p.id} value={p.id}>
+                          {p.name} ({speed} Mbps) - Rp {price.toLocaleString()}
+                        </option>
+                      );
+                    })}
+                  </select>
+                </div>
+
+                <div className="space-y-1.5">
+                  <label className="text-xs font-bold text-slate-400">Pilih NAS Router (Splicing Target)</label>
+                  <select 
+                    value={nasId} 
+                    onChange={(e) => setNasId(e.target.value)}
+                    className="w-full input-field text-xs bg-slate-950"
+                  >
+                    {nasList.length === 0 && <option value="">-- Tidak ada NAS aktif --</option>}
+                    {nasList.map(n => (
+                      <option key={n.id} value={n.id}>{n.name} ({n.ip_address})</option>
                     ))}
                   </select>
                 </div>

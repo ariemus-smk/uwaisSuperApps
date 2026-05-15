@@ -211,6 +211,19 @@ const Customers = () => {
     setLongitude(coords.lng);
   };
 
+  const handleStatusChange = async (customerId, newStatus) => {
+    try {
+      const res = await axios.patch(`/api/customers/${customerId}/status`, { status: newStatus });
+      if (res.data && res.data.status === 'success') {
+        fetchCustomers();
+      } else {
+        alert('Gagal mengubah status: ' + (res.data.message || 'Unknown error'));
+      }
+    } catch (err) {
+      alert('Error: ' + (err.response?.data?.message || err.message));
+    }
+  };
+
   const handleAddCustomer = async (e) => {
     e.preventDefault();
     if (!fullName || !ktpNumber || !whatsapp || !address) {
@@ -669,7 +682,24 @@ const Customers = () => {
                       </span>
                     </td>
                     <td className="py-4 px-6 text-center">
-                      <StatusBadge status={cust.lifecycle_status || 'PROSPEK'} />
+                      {['Superadmin', 'Admin'].includes(activeRole) ? (
+                        <div className="flex flex-col justify-center items-center gap-1.5">
+                          <StatusBadge status={cust.lifecycle_status || 'Prospek'} />
+                          <select 
+                            className="bg-slate-800 text-[10px] font-semibold text-slate-300 border border-slate-700 rounded px-1.5 py-0.5 outline-none focus:border-brand-500 cursor-pointer"
+                            value={cust.lifecycle_status || 'Prospek'}
+                            onChange={(e) => handleStatusChange(cust.id, e.target.value)}
+                          >
+                            <option value="Prospek">PROSPEK</option>
+                            <option value="Instalasi">INSTALASI</option>
+                            <option value="Aktif">AKTIF</option>
+                            <option value="Isolir">ISOLIR</option>
+                            <option value="Terminated">TERMINATED</option>
+                          </select>
+                        </div>
+                      ) : (
+                        <StatusBadge status={cust.lifecycle_status || 'Prospek'} />
+                      )}
                     </td>
                   </tr>
                 ))
