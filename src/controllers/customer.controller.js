@@ -13,8 +13,10 @@ const { ERROR_CODE } = require('../utils/constants');
  */
 async function list(req, res) {
   try {
+    const lifecycleStatus = req.query.lifecycle_status || req.query['lifecycle_status[]'];
+    
     const filters = {
-      lifecycle_status: req.query.lifecycle_status,
+      lifecycle_status: lifecycleStatus,
       search: req.query.search,
       page: req.query.page,
       limit: req.query.limit,

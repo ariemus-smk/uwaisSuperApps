@@ -126,4 +126,13 @@ router.post(
   subscriptionController.installation
 );
 
+// DELETE /api/subscriptions/:id - Delete subscription
+router.delete(
+  '/:id',
+  authenticate,
+  authorize(USER_ROLE.SUPERADMIN),
+  validate(idParamSchema, 'params'),
+  subscriptionController.remove
+);
+
 module.exports = router;

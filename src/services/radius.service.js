@@ -122,6 +122,19 @@ async function setIsolirProfile(username) {
     });
   }
 
+  // Check if address list attribute exists
+  const existingAddressList = await radreplyModel.findByUsernameAndAttribute(username, 'Mikrotik-Address-List');
+  if (existingAddressList) {
+    await radreplyModel.update(existingAddressList.id, { value: 'ISOLIR' });
+  } else {
+    await radreplyModel.create({
+      username,
+      attribute: 'Mikrotik-Address-List',
+      op: '=',
+      value: 'ISOLIR',
+    });
+  }
+
   // Add to isolir group if not already
   let groupRecord;
   const existingGroup = await raduserGroupModel.findByUsernameAndGroup(username, 'isolir');
@@ -214,6 +227,12 @@ async function removeIsolirProfile(username) {
     replyRemoved = true;
   }
 
+  // Remove address list attribute
+  const existingAddressList = await radreplyModel.findByUsernameAndAttribute(username, 'Mikrotik-Address-List');
+  if (existingAddressList && existingAddressList.value === 'ISOLIR') {
+    await radreplyModel.deleteById(existingAddressList.id);
+  }
+
   // Remove from isolir group
   const existingGroup = await raduserGroupModel.findByUsernameAndGroup(username, 'isolir');
   if (existingGroup) {
@@ -274,6 +293,23 @@ async function deletePPPoEAccount(username) {
   };
 }
 
+/**
+ * Remove a user from all RADIUS tables (radcheck, radusergroup, radreply).
+ * @param {string} username - PPPoE username
+ * @returns {Promise<boolean>} True if successful
+ */
+async function removeUser(username) {
+  if (!username) return false;
+
+  await Promise.all([
+    radcheckModel.deleteByUsername(username),
+    raduserGroupModel.deleteByUsername(username),
+    radreplyModel.deleteByUsername(username),
+  ]);
+
+  return true;
+}
+
 module.exports = {
   createPPPoEAccount,
   updateUserGroup,
@@ -282,4 +318,5 @@ module.exports = {
   removeIsolirProfile,
   resetFUPProfile,
   deletePPPoEAccount,
+  removeUser,
 };

@@ -13,7 +13,7 @@ const merchantService = require('../services/merchant.service');
 const invoiceModel = require('../models/invoice.model');
 const customerModel = require('../models/customer.model');
 const { success, created, error } = require('../utils/responseHelper');
-const { ERROR_CODE } = require('../utils/constants');
+const { ERROR_CODE, PAYMENT_METHOD } = require('../utils/constants');
 
 /**
  * POST /api/payments/tripay/create
@@ -113,6 +113,36 @@ async function processMerchantPayment(req, res) {
 }
 
 /**
+ * POST /api/payments/cash
+ * Process a direct cash payment by Superadmin or Admin.
+ * Marks invoice as LUNAS directly without balance deduction.
+ */
+async function processCashPayment(req, res) {
+  try {
+    const { invoice_id } = req.body;
+    const userId = req.user.id;
+
+    // Fetch the invoice to get the amount
+    const invoice = await invoiceModel.findById(Number(invoice_id));
+    if (!invoice) {
+      return error(res, 'Invoice not found.', 404, null, ERROR_CODE.RESOURCE_NOT_FOUND);
+    }
+
+    const result = await paymentService.processPayment(invoice.id, {
+      amount: invoice.total_amount,
+      method: PAYMENT_METHOD.CASH,
+      processed_by: userId
+    });
+
+    return success(res, result, 'Cash payment processed successfully.');
+  } catch (err) {
+    const statusCode = err.statusCode || 500;
+    const code = err.code || ERROR_CODE.INTERNAL_ERROR;
+    return error(res, err.message, statusCode, null, code);
+  }
+}
+
+/**
  * POST /api/payments/mitra/topup
  * Top up Mitra balance.
  */
@@ -195,4 +225,5 @@ module.exports = {
   topupMerchant,
   getMitraBalance,
   getMerchantBalance,
+  processCashPayment,
 };

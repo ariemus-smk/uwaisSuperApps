@@ -32,6 +32,8 @@ const registerNasSchema = Joi.object({
   radius_secret: Joi.string().trim().min(6).max(255).required(),
   api_port: Joi.number().integer().min(1).max(65535).default(8728),
   branch_id: Joi.number().integer().positive().required(),
+  mikrotik_username: Joi.string().trim().min(1).max(100).optional().allow(null, ''),
+  mikrotik_password: Joi.string().trim().min(1).max(100).optional().allow(null, ''),
 });
 
 const updateNasSchema = Joi.object({
@@ -44,6 +46,8 @@ const updateNasSchema = Joi.object({
   api_port: Joi.number().integer().min(1).max(65535).optional(),
   branch_id: Joi.number().integer().positive().optional(),
   vpn_accounts: Joi.object().optional(),
+  mikrotik_username: Joi.string().trim().min(1).max(100).optional().allow(null, ''),
+  mikrotik_password: Joi.string().trim().min(1).max(100).optional().allow(null, ''),
 }).min(1);
 
 const listNasQuerySchema = Joi.object({
@@ -103,6 +107,14 @@ router.put(
   authorize(USER_ROLE.SUPERADMIN),
   validate(updateNasSchema, 'body'),
   nasController.updateNas
+);
+
+// DELETE /api/nas/:id - Delete NAS (Superadmin only)
+router.delete(
+  '/:id',
+  authenticate,
+  authorize(USER_ROLE.SUPERADMIN),
+  nasController.deleteNas
 );
 
 // GET /api/nas/:id/script - Download config script (Superadmin only)

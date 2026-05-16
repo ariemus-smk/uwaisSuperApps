@@ -30,6 +30,7 @@ const capexRoutes = require('./capex.routes');
 const reportRoutes = require('./report.routes');
 const selfserviceRoutes = require('./selfservice.routes');
 const workJournalRoutes = require('./workJournal.routes');
+const regionRoutes = require('./region.routes');
 
 const router = Router();
 
@@ -104,5 +105,8 @@ router.use('/selfservice', selfserviceRoutes);
 
 // Work Journal routes (Teknisi daily activity journal)
 router.use('/work-journals', workJournalRoutes);
+
+// Regions hierarchy routes
+router.use('/regions', regionRoutes);
 
 module.exports = router;

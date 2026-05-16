@@ -15,7 +15,7 @@ const customerModel = require('../models/customer.model');
 const notificationService = require('./notification.service');
 const { appPool } = require('../config/database');
 const { calculateProrata } = require('../utils/prorataCalc');
-const { INVOICE_STATUS, ERROR_CODE, NOTIFICATION_ENTITY_TYPE, CUSTOMER_STATUS } = require('../utils/constants');
+const { INVOICE_STATUS, ERROR_CODE, NOTIFICATION_ENTITY_TYPE, CUSTOMER_STATUS, USER_ROLE } = require('../utils/constants');
 
 /** PPN rate: 11% */
 const PPN_RATE = 0.11;
@@ -322,7 +322,7 @@ async function getInvoices(filters = {}, user = {}) {
   };
 
   // Apply branch scoping
-  if (user.branch_id) {
+  if (user.branch_id && user.role !== USER_ROLE.SUPERADMIN) {
     queryFilters.branch_id = user.branch_id;
   }
 

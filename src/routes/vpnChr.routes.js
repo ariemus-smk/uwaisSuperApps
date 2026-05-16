@@ -29,8 +29,9 @@ const router = Router();
 const createSecretSchema = Joi.object({
   name: Joi.string().trim().min(1).max(100).required(),
   password: Joi.string().trim().min(6).max(255).required(),
-  service: Joi.string().valid('pptp', 'l2tp', 'sstp', 'ovpn').required(),
+  service: Joi.string().valid('any', 'pptp', 'l2tp', 'sstp', 'ovpn').required(),
   profile: Joi.string().trim().min(1).max(100).optional().default('default'),
+  remote_address: Joi.string().trim().max(100).optional().allow(''),
 });
 
 const createProfileSchema = Joi.object({

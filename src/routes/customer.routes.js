@@ -34,6 +34,13 @@ const createCustomerSchema = Joi.object({
   whatsapp_number: Joi.string().trim().min(10).max(15).required(),
   email: Joi.string().trim().email().allow(null, '').optional(),
   address: Joi.string().trim().min(5).max(500).required(),
+  rt: Joi.string().trim().max(10).allow(null, '').optional(),
+  rw: Joi.string().trim().max(10).allow(null, '').optional(),
+  dusun: Joi.string().trim().max(100).allow(null, '').optional(),
+  desa: Joi.string().trim().max(100).allow(null, '').optional(),
+  kecamatan: Joi.string().trim().max(100).allow(null, '').optional(),
+  kabupaten: Joi.string().trim().max(100).allow(null, '').optional(),
+  provinsi: Joi.string().trim().max(100).allow(null, '').optional(),
   latitude: Joi.number().min(-90).max(90).allow(null).optional(),
   longitude: Joi.number().min(-180).max(180).allow(null).optional(),
   branch_id: Joi.number().integer().positive().optional(),
@@ -45,6 +52,13 @@ const updateCustomerSchema = Joi.object({
   whatsapp_number: Joi.string().trim().min(10).max(15),
   email: Joi.string().trim().email().allow(null, ''),
   address: Joi.string().trim().min(5).max(500),
+  rt: Joi.string().trim().max(10).allow(null, ''),
+  rw: Joi.string().trim().max(10).allow(null, ''),
+  dusun: Joi.string().trim().max(100).allow(null, ''),
+  desa: Joi.string().trim().max(100).allow(null, ''),
+  kecamatan: Joi.string().trim().max(100).allow(null, ''),
+  kabupaten: Joi.string().trim().max(100).allow(null, ''),
+  provinsi: Joi.string().trim().max(100).allow(null, ''),
   latitude: Joi.number().min(-90).max(90).allow(null),
   longitude: Joi.number().min(-180).max(180).allow(null),
 }).min(1);
@@ -66,15 +80,29 @@ const idParamSchema = Joi.object({
 });
 
 const listQuerySchema = Joi.object({
-  lifecycle_status: Joi.string()
-    .valid(
+  lifecycle_status: Joi.alternatives().try(
+    Joi.string().valid(
       CUSTOMER_STATUS.PROSPEK,
       CUSTOMER_STATUS.INSTALASI,
       CUSTOMER_STATUS.AKTIF,
       CUSTOMER_STATUS.ISOLIR,
       CUSTOMER_STATUS.TERMINATED
-    )
-    .optional(),
+    ),
+    Joi.array().items(Joi.string().valid(
+      CUSTOMER_STATUS.PROSPEK,
+      CUSTOMER_STATUS.INSTALASI,
+      CUSTOMER_STATUS.AKTIF,
+      CUSTOMER_STATUS.ISOLIR,
+      CUSTOMER_STATUS.TERMINATED
+    ))
+  ).optional(),
+  'lifecycle_status[]': Joi.array().items(Joi.string().valid(
+    CUSTOMER_STATUS.PROSPEK,
+    CUSTOMER_STATUS.INSTALASI,
+    CUSTOMER_STATUS.AKTIF,
+    CUSTOMER_STATUS.ISOLIR,
+    CUSTOMER_STATUS.TERMINATED
+  )).optional(),
   search: Joi.string().trim().max(100).optional(),
   page: Joi.number().integer().positive().optional(),
   limit: Joi.number().integer().positive().max(100).optional(),
@@ -91,7 +119,7 @@ const auditLogQuerySchema = Joi.object({
 router.get(
   '/',
   authenticate,
-  authorize(USER_ROLE.ADMIN, USER_ROLE.ACCOUNTING, USER_ROLE.SALES, USER_ROLE.MITRA),
+  authorize(USER_ROLE.SUPERADMIN, USER_ROLE.ADMIN, USER_ROLE.ACCOUNTING, USER_ROLE.SALES, USER_ROLE.MITRA),
   validate(listQuerySchema, 'query'),
   customerController.list
 );
@@ -100,7 +128,7 @@ router.get(
 router.get(
   '/:id',
   authenticate,
-  authorize(USER_ROLE.ADMIN, USER_ROLE.ACCOUNTING, USER_ROLE.SALES, USER_ROLE.MITRA, USER_ROLE.TEKNISI),
+  authorize(USER_ROLE.SUPERADMIN, USER_ROLE.ADMIN, USER_ROLE.ACCOUNTING, USER_ROLE.SALES, USER_ROLE.MITRA, USER_ROLE.TEKNISI),
   validate(idParamSchema, 'params'),
   customerController.getById
 );
@@ -109,7 +137,7 @@ router.get(
 router.post(
   '/',
   authenticate,
-  authorize(USER_ROLE.ADMIN, USER_ROLE.SALES, USER_ROLE.MITRA),
+  authorize(USER_ROLE.SUPERADMIN, USER_ROLE.ADMIN, USER_ROLE.SALES, USER_ROLE.MITRA),
   validate(createCustomerSchema, 'body'),
   customerController.create
 );
@@ -118,7 +146,7 @@ router.post(
 router.put(
   '/:id',
   authenticate,
-  authorize(USER_ROLE.ADMIN),
+  authorize(USER_ROLE.SUPERADMIN, USER_ROLE.ADMIN),
   validate(idParamSchema, 'params'),
   validate(updateCustomerSchema, 'body'),
   customerController.update
@@ -128,7 +156,7 @@ router.put(
 router.patch(
   '/:id/status',
   authenticate,
-  authorize(USER_ROLE.ADMIN),
+  authorize(USER_ROLE.SUPERADMIN, USER_ROLE.ADMIN),
   validate(idParamSchema, 'params'),
   validate(changeStatusSchema, 'body'),
   customerController.changeStatus
@@ -138,7 +166,7 @@ router.patch(
 router.get(
   '/:id/audit-log',
   authenticate,
-  authorize(USER_ROLE.ADMIN, USER_ROLE.SUPERADMIN),
+  authorize(USER_ROLE.SUPERADMIN, USER_ROLE.ADMIN),
   validate(idParamSchema, 'params'),
   validate(auditLogQuerySchema, 'query'),
   customerController.getAuditLog

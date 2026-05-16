@@ -128,7 +128,7 @@ async function createUser(data) {
     status: 'Active',
     profit_sharing_pct: role === USER_ROLE.MITRA ? profit_sharing_pct : null,
     commission_amount: role === USER_ROLE.MERCHANT ? commission_amount : null,
-    saldo: (role === USER_ROLE.MITRA || role === USER_ROLE.MERCHANT) ? 0 : null,
+    saldo: 0,
   };
 
   const created = await userModel.create(userData);

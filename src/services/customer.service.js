@@ -39,7 +39,7 @@ const {
 /**
  * Roles allowed to register customers.
  */
-const REGISTERING_ROLES = [USER_ROLE.ADMIN, USER_ROLE.SALES, USER_ROLE.MITRA];
+const REGISTERING_ROLES = [USER_ROLE.SUPERADMIN, USER_ROLE.ADMIN, USER_ROLE.SALES, USER_ROLE.MITRA];
 
 /**
  * List customers with branch scoping and optional filters.
@@ -65,7 +65,7 @@ async function listCustomers(filters = {}, user = {}) {
     limit,
   };
 
-  if (user.branch_id) {
+  if (user.branch_id && user.role !== USER_ROLE.SUPERADMIN) {
     queryFilters.branch_id = user.branch_id;
   }
 
@@ -118,7 +118,7 @@ async function getCustomerById(id) {
 async function createCustomer(data, user) {
   // Validate registering user role
   if (!REGISTERING_ROLES.includes(user.role)) {
-    throw Object.assign(new Error('Only Admin, Sales, or Mitra can register customers.'), {
+    throw Object.assign(new Error('Only Superadmin, Admin, Sales, or Mitra can register customers.'), {
       statusCode: 403,
       code: ERROR_CODE.AUTH_FORBIDDEN,
     });
@@ -186,6 +186,13 @@ async function createCustomer(data, user) {
     whatsapp_number: data.whatsapp_number,
     email: data.email || null,
     address: data.address,
+    rt: data.rt || null,
+    rw: data.rw || null,
+    dusun: data.dusun || null,
+    desa: data.desa || null,
+    kecamatan: data.kecamatan || null,
+    kabupaten: data.kabupaten || null,
+    provinsi: data.provinsi || null,
     latitude: data.latitude || null,
     longitude: data.longitude || null,
     branch_id: branchId,

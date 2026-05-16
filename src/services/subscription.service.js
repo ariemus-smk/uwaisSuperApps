@@ -39,8 +39,8 @@ async function listSubscriptions(filters = {}, user = {}) {
     limit,
   };
 
-  // Apply branch scoping
-  if (user.branch_id) {
+  // Apply branch scoping (Only if not Superadmin)
+  if (user.role !== 'Superadmin' && user.branch_id) {
     queryFilters.branch_id = user.branch_id;
   }
 
@@ -107,8 +107,6 @@ async function create(customerId, packageId, nasId) {
   const isUsernameUnique = createRadcheckUniquenessChecker(radiusPool);
   const { username, password } = await generatePPPoECredentials({
     isUsernameUnique,
-    prefix: 'uwais-',
-    passwordLength: 12,
     maxAttempts: 10,
   });
 
@@ -129,10 +127,11 @@ async function create(customerId, packageId, nasId) {
  * Writes PPPoE account to RADIUS DB, assigns user to package group,
  * and sets subscription status to Active.
  * @param {number} subscriptionId - Subscription ID
+ * @param {number} [actorId=1] - User ID performing the activation
  * @returns {Promise<object>} Updated subscription
  * @throws {Error} If subscription not found or not in Pending status
  */
-async function activate(subscriptionId) {
+async function activate(subscriptionId, actorId = 1) {
   const subscription = await subscriptionModel.findById(subscriptionId);
 
   if (!subscription) {
@@ -171,11 +170,34 @@ async function activate(subscriptionId) {
   const groupname = `pkg-${pkg.id}`;
   await radiusService.updateUserGroup(subscription.pppoe_username, groupname);
 
-  // Update subscription status to Active
+  // Apply Isolir profile immediately because first invoice is unpaid
+  await radiusService.setIsolirProfile(subscription.pppoe_username);
+
+  const activationDate = new Date();
+
+  // Update subscription status to Suspended (Isolir state)
   await subscriptionModel.update(subscriptionId, {
-    status: SUBSCRIPTION_STATUS.ACTIVE,
-    activated_at: new Date().toISOString().slice(0, 19).replace('T', ' '),
+    status: SUBSCRIPTION_STATUS.SUSPENDED,
+    activated_at: activationDate.toISOString().slice(0, 19).replace('T', ' '),
   });
+
+  // Update customer status to ISOLIR
+  const customerModel = require('../models/customer.model');
+  const { CUSTOMER_STATUS } = require('../utils/constants');
+  await customerModel.updateStatus(subscription.customer_id, CUSTOMER_STATUS.ISOLIR, actorId);
+
+  // Generate prorated invoice for the new subscription
+  const billingService = require('./billing.service');
+  try {
+    await billingService.generateInvoice(subscriptionId, {
+      isFirstInvoice: true,
+      activationDate: activationDate,
+      applyDp: true, // deduct any down payments
+    });
+  } catch (err) {
+    console.error(`[Subscription Service] Failed to generate first invoice: ${err.message}`);
+    // We log but do not fail the activation
+  }
 
   // Return updated subscription
   return subscriptionModel.findByIdWithDetails(subscriptionId);
@@ -298,6 +320,34 @@ async function updateSubscription(id, data) {
   return subscriptionModel.findByIdWithDetails(id);
 }
 
+/**
+ * Delete a subscription.
+ * Removes the account from RADIUS and deletes the record from the app database.
+ * @param {number} id - Subscription ID
+ * @returns {Promise<boolean>} True if deleted
+ * @throws {Error} If subscription not found
+ */
+async function deleteSubscription(id) {
+  const subscription = await subscriptionModel.findById(id);
+
+  if (!subscription) {
+    throw Object.assign(new Error('Subscription not found.'), {
+      statusCode: 404,
+      code: ERROR_CODE.RESOURCE_NOT_FOUND,
+    });
+  }
+
+  // 1. Remove from RADIUS if username exists
+  if (subscription.pppoe_username) {
+    await radiusService.removeUser(subscription.pppoe_username);
+  }
+
+  // 2. Delete from App DB
+  await subscriptionModel.remove(id);
+
+  return true;
+}
+
 module.exports = {
   listSubscriptions,
   getSubscriptionById,
@@ -305,4 +355,5 @@ module.exports = {
   activate,
   install,
   updateSubscription,
+  deleteSubscription,
 };

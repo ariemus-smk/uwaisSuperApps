@@ -2,6 +2,7 @@
  * Payment routes.
  * POST   /api/payments/tripay/create     - Create Tripay payment (Pelanggan, Admin)
  * POST   /api/payments/tripay/callback   - Tripay webhook callback (Public, signature verified internally)
+ * POST   /api/payments/cash              - Process direct cash payment (Superadmin, Admin)
  * POST   /api/payments/mitra             - Process payment via Mitra (Mitra)
  * POST   /api/payments/merchant          - Process payment via Merchant (Merchant)
  * POST   /api/payments/mitra/topup       - Top up Mitra balance (Mitra)
@@ -61,6 +62,15 @@ router.post(
 router.post(
   '/tripay/callback',
   paymentController.handleTripayCallback
+);
+
+// POST /api/payments/cash - Process direct cash payment
+router.post(
+  '/cash',
+  authenticate,
+  authorize(USER_ROLE.SUPERADMIN, USER_ROLE.ADMIN),
+  validate(mitraPaymentSchema, 'body'), // Reuse schema since it only requires invoice_id
+  paymentController.processCashPayment
 );
 
 // POST /api/payments/mitra - Process payment via Mitra

@@ -24,16 +24,18 @@ async function create(oltData) {
     ip_address,
     total_pon_ports,
     branch_id,
+    latitude = null,
+    longitude = null,
     status = 'Active',
   } = oltData;
 
   const [result] = await appPool.execute(
-    `INSERT INTO olts (name, ip_address, total_pon_ports, branch_id, status, created_at, updated_at)
-     VALUES (?, ?, ?, ?, ?, NOW(), NOW())`,
-    [name, ip_address, total_pon_ports, branch_id, status]
+    `INSERT INTO olts (name, ip_address, total_pon_ports, branch_id, latitude, longitude, status, created_at, updated_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?, NOW(), NOW())`,
+    [name, ip_address, total_pon_ports, branch_id, latitude || null, longitude || null, status]
   );
 
-  return { id: result.insertId, name, ip_address, total_pon_ports, branch_id, status };
+  return { id: result.insertId, name, ip_address, total_pon_ports, branch_id, latitude, longitude, status };
 }
 
 /**
@@ -96,14 +98,19 @@ async function findAll(filters = {}) {
  * @returns {Promise<object>} Query result
  */
 async function update(id, data) {
-  const allowedFields = ['name', 'ip_address', 'total_pon_ports', 'branch_id', 'status'];
+  const allowedFields = ['name', 'ip_address', 'total_pon_ports', 'branch_id', 'latitude', 'longitude', 'status'];
   const setClauses = [];
   const params = [];
 
   for (const field of allowedFields) {
     if (data[field] !== undefined) {
       setClauses.push(`${field} = ?`);
-      params.push(data[field]);
+      // Convert empty strings to null for coordinates
+      if ((field === 'latitude' || field === 'longitude') && data[field] === '') {
+        params.push(null);
+      } else {
+        params.push(data[field]);
+      }
     }
   }
 
@@ -135,10 +142,24 @@ async function findByIpAddress(ipAddress) {
   return rows.length === 0 ? null : rows[0];
 }
 
+/**
+ * Delete an OLT record.
+ * @param {number} id - OLT ID
+ * @returns {Promise<boolean>} True if deleted
+ */
+async function deleteById(id) {
+  const [result] = await appPool.execute(
+    'DELETE FROM olts WHERE id = ?',
+    [id]
+  );
+  return result.affectedRows > 0;
+}
+
 module.exports = {
   create,
   findById,
   findAll,
   update,
   findByIpAddress,
+  deleteById,
 };

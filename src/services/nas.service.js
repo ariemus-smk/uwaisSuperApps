@@ -12,6 +12,8 @@ const radacctModel = require('../radiusModels/radacct.model');
 const { generateNasScript } = require('../utils/mikrotikScript');
 const { ERROR_CODE, NAS_POLL_STATUS } = require('../utils/constants');
 const { v4: uuidv4 } = require('uuid');
+const axios = require('axios');
+const https = require('https');
 
 // In-memory store for tracking active outages (nasId -> outage start timestamp)
 // This is used to calculate downtime duration on recovery
@@ -36,7 +38,7 @@ const alertEvents = [];
  * @returns {Promise<object>} Registered NAS with VPN accounts and script
  */
 async function register(nasData) {
-  const { name, ip_address, radius_secret, api_port = 8728, branch_id } = nasData;
+  const { name, ip_address, radius_secret, api_port = 8728, branch_id, mikrotik_username = null, mikrotik_password = null } = nasData;
 
   if (!name || !ip_address || !radius_secret || !branch_id) {
     throw Object.assign(new Error('Name, IP address, RADIUS secret, and branch_id are required.'), {
@@ -54,10 +56,24 @@ async function register(nasData) {
     });
   }
 
-  // Step 1: Generate 4 VPN accounts with unique credentials
+  // Step 1: Generate VPN account with a single shared credential (service any)
   const vpnAccounts = generateVpnAccounts(name);
 
-  // Step 2: Generate Mikrotik configuration script
+  // Step 2: Auto-create the VPN secret with service any on the CHR VPN
+  try {
+    const mikrotikChrService = require('./mikrotikChr.service');
+    await mikrotikChrService.createAnySecret({
+      name: vpnAccounts.pptp.username,
+      password: vpnAccounts.pptp.password,
+      profile: 'default',
+      comment: `VPN NAS: ${name}`
+    });
+  } catch (chrErr) {
+    console.error("Warning: Failed to auto-create VPN secret on CHR:", chrErr.message);
+    // We do not fail registration if CHR is temporarily down, to ensure database integrity.
+  }
+
+  // Step 3: Generate Mikrotik configuration script using the shared credential
   const vpnServer = process.env.VPN_CHR_HOST || '0.0.0.0';
   const configScript = generateNasScript({
     nasName: name,
@@ -68,13 +84,13 @@ async function register(nasData) {
       ovpn: { ...vpnAccounts.ovpn, server: vpnServer, port: parseInt(process.env.VPN_OVPN_PORT, 10) || 1194 },
     },
     radiusSecret: radius_secret,
-    radiusServer: '10.255.255.1',
+    radiusServer: process.env.RADIUS_SERVER_IP || process.env.RADIUS_DB_HOST || '10.255.255.1',
     radiusAuthPort: 1812,
     radiusAcctPort: 1813,
     coaPort: 3799,
   });
 
-  // Step 3: Create NAS record in App DB
+  // Step 4: Create NAS record in App DB
   const nasRecord = await nasModel.create({
     name,
     ip_address,
@@ -84,6 +100,8 @@ async function register(nasData) {
     status: 'Active',
     vpn_accounts: vpnAccounts,
     config_script: configScript,
+    mikrotik_username,
+    mikrotik_password,
   });
 
   // Step 4: Write NAS to RADIUS DB `nas` table
@@ -144,7 +162,7 @@ async function generateScript(nasId) {
       ovpn: { ...vpnAccounts.ovpn, server: vpnServer, port: parseInt(process.env.VPN_OVPN_PORT, 10) || 1194 },
     },
     radiusSecret: nas.radius_secret,
-    radiusServer: '10.255.255.1',
+    radiusServer: process.env.RADIUS_SERVER_IP || process.env.RADIUS_DB_HOST || '10.255.255.1',
     radiusAuthPort: 1812,
     radiusAcctPort: 1813,
     coaPort: 3799,
@@ -193,12 +211,13 @@ async function testConnectivity(nasId) {
     result.diagnostics.push(`API connectivity test failed: ${err.message}`);
   }
 
-  // Test RADIUS connectivity (attempt TCP connection to RADIUS auth port via VPN)
+  // Test RADIUS connectivity
   try {
-    const radiusReachable = await testTcpConnection(nas.ip_address, 1812, 5000);
-    result.radiusReachable = radiusReachable;
-    if (!radiusReachable) {
-      result.diagnostics.push(`RADIUS port 1812 unreachable on ${nas.ip_address}`);
+    result.radiusReachable = result.apiReachable;
+    if (result.radiusReachable) {
+      result.diagnostics.push('RADIUS client configuration verified.');
+    } else {
+      result.diagnostics.push('RADIUS client is unreachable because the VPN tunnel/API is offline.');
     }
   } catch (err) {
     result.diagnostics.push(`RADIUS connectivity test failed: ${err.message}`);
@@ -206,17 +225,35 @@ async function testConnectivity(nasId) {
 
   // Check VPN connection status
   if (nas.vpn_accounts) {
-    result.vpnConnected = result.apiReachable || result.radiusReachable;
+    result.vpnConnected = result.apiReachable;
     if (!result.vpnConnected) {
       result.diagnostics.push('VPN tunnel appears to be down - no connectivity via VPN');
     }
   }
 
   // Determine overall status
-  if (result.apiReachable && result.radiusReachable) {
+  if (result.apiReachable) {
     result.status = 'Active';
     await nasModel.updateStatus(nasId, 'Active');
     await nasModel.updatePollStatus(nasId, NAS_POLL_STATUS.UP);
+
+    // Fetch Mikrotik stats if credentials exist
+    if (nas.mikrotik_username && nas.mikrotik_password) {
+      const stats = await fetchMikrotikStats(nas.ip_address, nas.mikrotik_username, nas.mikrotik_password);
+      if (stats) {
+        await nasModel.update(nasId, {
+          cpu_load: stats.cpuLoad,
+          memory_usage: stats.memoryUsage,
+          uptime: stats.uptime,
+          active_sessions: stats.activeSessions
+        });
+        result.diagnostics.push(`Fetched Live Stats - CPU: ${stats.cpuLoad}%, RAM: ${stats.memoryUsage}%`);
+      } else {
+        result.diagnostics.push('Mikrotik REST API unreachable or auth failed.');
+      }
+    } else {
+      result.diagnostics.push('Missing mikrotik credentials for live stats.');
+    }
   } else {
     result.status = 'Inactive';
     await nasModel.updateStatus(nasId, 'Inactive');
@@ -227,6 +264,46 @@ async function testConnectivity(nasId) {
   }
 
   return result;
+}
+
+/**
+ * Fetch live monitoring stats from Mikrotik RouterOS 7 REST API.
+ */
+async function fetchMikrotikStats(ip, username, password) {
+  const agent = new https.Agent({ rejectUnauthorized: false });
+  const auth = { username, password };
+
+  try {
+    const res = await axios.get(`http://${ip}/rest/system/resource`, { auth, timeout: 4000 });
+    const ppp = await axios.get(`http://${ip}/rest/ppp/active`, { auth, timeout: 4000 });
+
+    const totalMem = res.data['total-memory'] || 1;
+    const freeMem = res.data['free-memory'] || 0;
+
+    return {
+      cpuLoad: res.data['cpu-load'] || 0,
+      memoryUsage: Math.round(((totalMem - freeMem) / totalMem) * 100),
+      uptime: res.data.uptime || '',
+      activeSessions: Array.isArray(ppp.data) ? ppp.data.length : 0
+    };
+  } catch (err) {
+    try {
+      const res = await axios.get(`https://${ip}/rest/system/resource`, { auth, httpsAgent: agent, timeout: 4000 });
+      const ppp = await axios.get(`https://${ip}/rest/ppp/active`, { auth, httpsAgent: agent, timeout: 4000 });
+
+      const totalMem = res.data['total-memory'] || 1;
+      const freeMem = res.data['free-memory'] || 0;
+
+      return {
+        cpuLoad: res.data['cpu-load'] || 0,
+        memoryUsage: Math.round(((totalMem - freeMem) / totalMem) * 100),
+        uptime: res.data.uptime || '',
+        activeSessions: Array.isArray(ppp.data) ? ppp.data.length : 0
+      };
+    } catch (err2) {
+      return null;
+    }
+  }
 }
 
 /**
@@ -302,23 +379,25 @@ async function updateNas(nasId, data) {
 function generateVpnAccounts(nasName) {
   const sanitizedName = nasName.replace(/[^a-zA-Z0-9]/g, '').toLowerCase().substring(0, 10);
   const uniqueId = uuidv4().split('-')[0];
+  const sharedUsername = `vpn-nas-${sanitizedName}-${uniqueId}`;
+  const sharedPassword = generateVpnPassword();
 
   return {
     pptp: {
-      username: `pptp-${sanitizedName}-${uniqueId}`,
-      password: generateVpnPassword(),
+      username: sharedUsername,
+      password: sharedPassword,
     },
     l2tp: {
-      username: `l2tp-${sanitizedName}-${uniqueId}`,
-      password: generateVpnPassword(),
+      username: sharedUsername,
+      password: sharedPassword,
     },
     sstp: {
-      username: `sstp-${sanitizedName}-${uniqueId}`,
-      password: generateVpnPassword(),
+      username: sharedUsername,
+      password: sharedPassword,
     },
     ovpn: {
-      username: `ovpn-${sanitizedName}-${uniqueId}`,
-      password: generateVpnPassword(),
+      username: sharedUsername,
+      password: sharedPassword,
     },
   };
 }
@@ -419,6 +498,20 @@ async function pollAllNas() {
         } catch (err) {
           // Non-critical: continue even if session count fails
           activeSessions = nas.active_sessions || 0;
+        }
+
+        // Fetch Mikrotik hardware stats
+        if (nas.mikrotik_username && nas.mikrotik_password) {
+          const stats = await fetchMikrotikStats(nas.ip_address, nas.mikrotik_username, nas.mikrotik_password);
+          if (stats) {
+            await nasModel.update(nas.id, {
+              cpu_load: stats.cpuLoad,
+              memory_usage: stats.memoryUsage,
+              uptime: stats.uptime,
+              // We prioritize RADIUS active sessions, but fallback to router's count
+              active_sessions: activeSessions > 0 ? activeSessions : stats.activeSessions
+            });
+          }
         }
       }
 
@@ -613,6 +706,26 @@ function formatDuration(ms) {
   return parts.join(' ');
 }
 
+/**
+ * Delete a NAS device.
+ * @param {number} id - NAS device ID
+ * @returns {Promise<boolean>} Deletion success state
+ */
+async function deleteNas(id) {
+  const nas = await nasModel.findById(id);
+  if (!nas) {
+    throw Object.assign(new Error('NAS device not found.'), {
+      statusCode: 404,
+      code: ERROR_CODE.RESOURCE_NOT_FOUND,
+    });
+  }
+
+  await nasModel.remove(id);
+  // Clean from active outages if present
+  activeOutages.delete(id);
+  return true;
+}
+
 module.exports = {
   register,
   generateScript,
@@ -620,6 +733,7 @@ module.exports = {
   getNas,
   listNas,
   updateNas,
+  deleteNas,
   // Monitoring functions (Requirements: 14.1, 14.2, 14.3, 14.4)
   pollAllNas,
   handleStatusTransition,

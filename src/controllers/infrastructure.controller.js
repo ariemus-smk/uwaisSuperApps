@@ -281,6 +281,56 @@ async function checkCoverage(req, res) {
   }
 }
 
+/**
+ * DELETE /api/infrastructure/olts/:id
+ * Delete an OLT device.
+ */
+async function deleteOlt(req, res) {
+  try {
+    const { id } = req.params;
+    
+    const olt = await oltModel.findById(Number(id));
+    if (!olt) {
+      return error(res, 'OLT device not found.', 404, null, ERROR_CODE.RESOURCE_NOT_FOUND);
+    }
+
+    // Check if any child ODPs exist
+    const odpResult = await odpModel.findAll({ olt_id: Number(id) });
+    if (odpResult.total > 0) {
+      return error(res, 'Cannot delete OLT because it has associated ODP boxes. Delete ODPs first.', 400, null, ERROR_CODE.VALIDATION_ERROR);
+    }
+
+    await oltModel.deleteById(Number(id));
+    return success(res, null, 'OLT deleted successfully.');
+  } catch (err) {
+    const statusCode = err.statusCode || 500;
+    const code = err.code || ERROR_CODE.INTERNAL_ERROR;
+    return error(res, err.message, statusCode, null, code);
+  }
+}
+
+/**
+ * DELETE /api/infrastructure/odps/:id
+ * Delete an ODP splitter box.
+ */
+async function deleteOdp(req, res) {
+  try {
+    const { id } = req.params;
+    
+    const odp = await odpModel.findById(Number(id));
+    if (!odp) {
+      return error(res, 'ODP device not found.', 404, null, ERROR_CODE.RESOURCE_NOT_FOUND);
+    }
+
+    await odpModel.deleteById(Number(id));
+    return success(res, null, 'ODP deleted successfully.');
+  } catch (err) {
+    const statusCode = err.statusCode || 500;
+    const code = err.code || ERROR_CODE.INTERNAL_ERROR;
+    return error(res, err.message, statusCode, null, code);
+  }
+}
+
 module.exports = {
   listOlts,
   registerOlt,
@@ -290,4 +340,6 @@ module.exports = {
   createOdp,
   updateOdp,
   checkCoverage,
+  deleteOlt,
+  deleteOdp,
 };

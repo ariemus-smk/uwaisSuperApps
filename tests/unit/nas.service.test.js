@@ -333,7 +333,7 @@ describe('NAS Service', () => {
   });
 
   describe('VPN account generation', () => {
-    it('should generate 4 unique accounts (PPTP, L2TP, SSTP, OVPN)', async () => {
+    it('should generate unified shared credential for all accounts (PPTP, L2TP, SSTP, OVPN)', async () => {
       // Mock: no existing NAS with same IP
       appPool.execute.mockResolvedValueOnce([[], []]); // findByIpAddress
       // Mock: App DB create
@@ -350,23 +350,20 @@ describe('NAS Service', () => {
 
       const vpn = result.vpn_accounts;
 
-      // Verify 4 distinct service types
+      // Verify 4 distinct service types exist
       expect(Object.keys(vpn)).toHaveLength(4);
       expect(vpn.pptp).toBeDefined();
       expect(vpn.l2tp).toBeDefined();
       expect(vpn.sstp).toBeDefined();
       expect(vpn.ovpn).toBeDefined();
 
-      // Verify usernames are unique
+      // Verify usernames are uniform
       const usernames = [vpn.pptp.username, vpn.l2tp.username, vpn.sstp.username, vpn.ovpn.username];
       const uniqueUsernames = new Set(usernames);
-      expect(uniqueUsernames.size).toBe(4);
+      expect(uniqueUsernames.size).toBe(1);
 
-      // Verify usernames contain the service type prefix
-      expect(vpn.pptp.username).toMatch(/^pptp-/);
-      expect(vpn.l2tp.username).toMatch(/^l2tp-/);
-      expect(vpn.sstp.username).toMatch(/^sstp-/);
-      expect(vpn.ovpn.username).toMatch(/^ovpn-/);
+      // Verify username uses the unified prefix
+      expect(vpn.pptp.username).toMatch(/^vpn-nas-/);
 
       // Verify passwords are 16 characters alphanumeric
       for (const type of ['pptp', 'l2tp', 'sstp', 'ovpn']) {

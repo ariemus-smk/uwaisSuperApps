@@ -94,7 +94,7 @@ async function findAll(filters = {}) {
   let countQuery = `SELECT COUNT(*) as total FROM invoices i
     LEFT JOIN customers c ON i.customer_id = c.id WHERE 1=1`;
   let dataQuery = `SELECT i.*, c.full_name AS customer_name, c.branch_id,
-    s.pppoe_username, p.name AS package_name
+    s.pppoe_username, p.name AS package_name, p.service_type
     FROM invoices i
     LEFT JOIN customers c ON i.customer_id = c.id
     LEFT JOIN subscriptions s ON i.subscription_id = s.id

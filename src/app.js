@@ -25,6 +25,10 @@ app.use(morgan('combined'));
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
+// 5. Serve static files (for Isolir Landing Page)
+const path = require('path');
+app.use(express.static(path.join(__dirname, 'public')));
+
 // --- Routes ---
 
 // Health check (no auth required)
@@ -43,6 +47,11 @@ app.get('/', (req, res) => {
     version: '1.0.0',
     api: apiPrefix
   });
+});
+
+// Isolir Landing Page Route
+app.get('/isolir', (req, res) => {
+  res.sendFile(path.join(__dirname, 'public', 'isolir.html'));
 });
 
 // All API routes under the configured prefix

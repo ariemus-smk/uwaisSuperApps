@@ -154,6 +154,11 @@ function authorize(...allowedRoles) {
 
     const userRole = req.user.role;
 
+    // Superadmin is the global owner and bypasses all endpoint restrictions
+    if (userRole === USER_ROLE.SUPERADMIN) {
+      return next();
+    }
+
     // Check if the user's role is in the allowed roles list
     if (!allowedRoles.includes(userRole)) {
       return error(

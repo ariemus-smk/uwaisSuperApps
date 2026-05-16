@@ -3,7 +3,7 @@ require('dotenv').config();
 const app = require('./app');
 const { database } = require('./config');
 
-const PORT = process.env.PORT || 3000;
+const PORT = process.env.PORT || 3500;
 const NODE_ENV = process.env.NODE_ENV || 'development';
 
 const server = app.listen(PORT, async () => {
@@ -17,11 +17,30 @@ const server = app.listen(PORT, async () => {
   if (dbStatus.radiusDb) {
     console.log('[DB] RADIUS DB connected successfully.');
   }
+
+  // Initialize Background Jobs
+  try {
+    const jobs = require('./jobs');
+    jobs.registerAllJobs();
+    jobs.initializeScheduler();
+    console.log('[JOBS] Background scheduler initialized.');
+  } catch (err) {
+    console.error('[JOBS] Failed to initialize scheduler:', err.message);
+  }
 });
 
 // Graceful shutdown
 async function shutdown(signal) {
   console.log(`${signal} received. Shutting down gracefully...`);
+  
+  // Stop scheduler first
+  try {
+    const jobs = require('./jobs');
+    jobs.stopScheduler();
+  } catch (err) {
+    // Ignore if not initialized
+  }
+
   server.close(async () => {
     await database.closePools();
     console.log('Server closed.');

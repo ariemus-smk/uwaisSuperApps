@@ -92,7 +92,8 @@ async function update(req, res) {
 async function activate(req, res) {
   try {
     const { id } = req.params;
-    const subscription = await subscriptionService.activate(Number(id));
+    const actorId = req.user ? req.user.id : 1;
+    const subscription = await subscriptionService.activate(Number(id), actorId);
 
     return success(res, subscription, 'Subscription activated successfully.');
   } catch (err) {
@@ -119,6 +120,23 @@ async function installation(req, res) {
   }
 }
 
+/**
+ * DELETE /api/subscriptions/:id
+ * Delete a subscription and its RADIUS account.
+ */
+async function remove(req, res) {
+  try {
+    const { id } = req.params;
+    await subscriptionService.deleteSubscription(Number(id));
+
+    return success(res, null, 'Subscription deleted successfully.');
+  } catch (err) {
+    const statusCode = err.statusCode || 500;
+    const code = err.code || ERROR_CODE.INTERNAL_ERROR;
+    return error(res, err.message, statusCode, null, code);
+  }
+}
+
 module.exports = {
   list,
   getById,
@@ -126,4 +144,5 @@ module.exports = {
   update,
   activate,
   installation,
+  remove,
 };

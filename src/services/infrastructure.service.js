@@ -23,7 +23,7 @@ const { ERROR_CODE } = require('../utils/constants');
  * @returns {Promise<object>} Registered OLT record with connectivity result
  */
 async function registerOlt(oltData) {
-  const { name, ip_address, total_pon_ports, branch_id } = oltData;
+  const { name, ip_address, total_pon_ports, branch_id, latitude, longitude } = oltData;
 
   if (!name || !ip_address || !total_pon_ports || !branch_id) {
     throw Object.assign(new Error('Name, IP address, total PON ports, and branch_id are required.'), {
@@ -41,9 +41,9 @@ async function registerOlt(oltData) {
     });
   }
 
-  // Perform connectivity test to determine initial status
-  const reachable = await testTcpConnection(ip_address, 23, 5000);
-  const status = reachable ? 'Active' : 'Inactive';
+  // Perform connectivity test to determine initial status, but default status to Active so that admins can add ODPs immediately
+  const reachable = await testTcpConnection(ip_address, 23, 5000).catch(() => false);
+  const status = 'Active';
 
   // Create OLT record
   const olt = await oltModel.create({
@@ -51,6 +51,8 @@ async function registerOlt(oltData) {
     ip_address,
     total_pon_ports,
     branch_id,
+    latitude,
+    longitude,
     status,
   });
 

@@ -43,14 +43,21 @@ function generatePassword(length = 12) {
 }
 
 /**
- * Generate a PPPoE username based on a prefix and random suffix.
- * Format: {prefix}{randomSuffix} (e.g., "uwais-ab3k9x")
- * @param {string} [prefix='uwais-'] - Username prefix
+ * Generate a PPPoE username based on date and random digits.
+ * Format: YYYYMMDD + 6 random digits + @uwais.id (e.g., "20240515123456@uwais.id")
  * @returns {string} Generated username
  */
-function generateUsername(prefix = 'uwais-') {
-  const suffix = generateRandomString(6);
-  return `${prefix}${suffix}`;
+function generateUsername() {
+  const now = new Date();
+  const year = now.getFullYear();
+  const month = String(now.getMonth() + 1).padStart(2, '0');
+  const day = String(now.getDate()).padStart(2, '0');
+  const dateStr = `${year}${month}${day}`;
+  
+  // 6 random digits
+  const randomSuffix = Math.floor(100000 + Math.random() * 900000).toString();
+  
+  return `${dateStr}${randomSuffix}@uwais.id`;
 }
 
 /**
@@ -58,19 +65,13 @@ function generateUsername(prefix = 'uwais-') {
  * Checks uniqueness against existing radcheck entries using the provided checker function.
  *
  * @param {object} options - Generation options
- * @param {function} options.isUsernameUnique - Async function that accepts a username string
- *   and returns true if the username does NOT exist in radcheck, false if it already exists.
- * @param {string} [options.prefix='uwais-'] - Username prefix
- * @param {number} [options.passwordLength=12] - Password length
- * @param {number} [options.maxAttempts=10] - Maximum attempts to find a unique username
+ * @param {function} options.isUsernameUnique - Async function that checks radcheck uniqueness
+ * @param {number} [options.maxAttempts=10] - Maximum attempts
  * @returns {Promise<{username: string, password: string}>} Generated credentials
- * @throws {Error} If unable to generate a unique username after maxAttempts
  */
 async function generatePPPoECredentials(options = {}) {
   const {
     isUsernameUnique,
-    prefix = 'uwais-',
-    passwordLength = 12,
     maxAttempts = 10,
   } = options;
 
@@ -83,7 +84,7 @@ async function generatePPPoECredentials(options = {}) {
   let attempts = 0;
 
   while (!isUnique && attempts < maxAttempts) {
-    username = generateUsername(prefix);
+    username = generateUsername();
     isUnique = await isUsernameUnique(username);
     attempts++;
   }
@@ -94,7 +95,7 @@ async function generatePPPoECredentials(options = {}) {
     );
   }
 
-  const password = generatePassword(passwordLength);
+  const password = '1234567';
 
   return { username, password };
 }

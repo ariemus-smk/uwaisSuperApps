@@ -1046,6 +1046,71 @@ Export type menghasilkan file Excel/PDF.
 
 ---
 
+## 24. Administrative Regions
+
+| Method | Endpoint | Role |
+|--------|----------|------|
+| GET | /api/regions | Admin, Superadmin, Teknisi, Sales, Pelanggan, Mitra |
+| GET | /api/regions/:id | Admin, Superadmin, Teknisi, Sales, Pelanggan, Mitra |
+| POST | /api/regions/import | **Superadmin** |
+| POST | /api/regions | **Superadmin** |
+| PUT | /api/regions/:id | **Superadmin** |
+| DELETE | /api/regions/:id | **Superadmin** |
+
+### GET /api/regions
+Query params (optional):
+- `region_type`: `Provinsi` \| `Kabupaten` \| `Kecamatan` \| `Desa`
+- `region_ref`: number (ID of parent region)
+- `page`, `limit`
+
+### POST /api/regions/import
+Bulk upload regions from a parsed CSV list. Resolves hierarchy dynamically based on `parent_name`.
+Request body:
+```json
+{
+  "regions": [
+    {
+      "region_name": "Kalimantan Barat",
+      "region_type": "Provinsi",
+      "parent_name": ""
+    },
+    {
+      "region_name": "Kota Pontianak",
+      "region_type": "Kabupaten",
+      "parent_name": "Kalimantan Barat"
+    }
+  ]
+}
+```
+
+### POST /api/regions
+```json
+{
+  "region_name": "string (required, min 2, max 100)",
+  "region_type": "Provinsi|Kabupaten|Kecamatan|Desa (required)",
+  "region_ref": "number|null (optional - required for Kabupaten, Kecamatan, Desa)"
+}
+```
+
+### PUT /api/regions/:id
+```json
+{
+  "region_name": "string (optional, min 2, max 100)",
+  "region_type": "Provinsi|Kabupaten|Kecamatan|Desa (optional)",
+  "region_ref": "number|null (optional)"
+}
+```
+
+#### Hierarchical Validation Rules:
+- **Provinsi:** `region_ref` must be null or omitted.
+- **Kabupaten:** `region_ref` must point to an existing region of type `Provinsi`.
+- **Kecamatan:** `region_ref` must point to an existing region of type `Kabupaten`.
+- **Desa:** `region_ref` must point to an existing region of type `Kecamatan`.
+- **Self-Reference Protection:** A region cannot have its own ID as its parent reference.
+- **Delete Protection:** A region cannot be deleted if other regions use it as its parent reference.
+
+---
+
 ## Enums & Constants Reference
 
 ### Customer Lifecycle Status
