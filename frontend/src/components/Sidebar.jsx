@@ -84,9 +84,7 @@ const Sidebar = () => {
       {/* Mobile Toggle Bar */}
       <div className="lg:hidden flex items-center justify-between p-4 bg-slate-900 border-b border-slate-800 text-slate-100 sticky top-0 z-50">
         <div className="flex items-center space-x-2">
-          <div className="h-8 w-8 bg-gradient-to-tr from-brand-600 to-indigo-500 rounded-lg flex items-center justify-center shadow-lg shadow-brand-500/25">
-            <span className="font-extrabold text-white text-base">U</span>
-          </div>
+          <img src="/logo.png" alt="Logo" className="h-8 w-8 object-contain" />
           <span className="font-bold tracking-wide text-lg gradient-text-primary">UwaisApps</span>
         </div>
         <button onClick={() => setIsOpen(!isOpen)} className="p-1 rounded-lg bg-slate-800 border border-slate-700">
@@ -109,12 +107,10 @@ const Sidebar = () => {
         {/* Logo and Branding Header */}
         <div className="p-6 border-b border-slate-800/50 flex items-center justify-between">
           <div className="flex items-center space-x-3">
-            <div className="h-10 w-10 bg-gradient-to-tr from-brand-500 via-indigo-600 to-brand-700 rounded-xl flex items-center justify-center shadow-xl shadow-brand-500/20 ring-1 ring-white/10">
-              <span className="font-black text-white text-xl">U</span>
-            </div>
+            <img src="/logo.png" alt="Logo" className="h-10 w-10 object-contain" />
             <div>
-              <span className="font-extrabold tracking-wide text-xl gradient-text-primary block">UwaisApps</span>
-              <span className="text-[10px] text-slate-500 font-semibold uppercase tracking-wider block -mt-1">Billing ISP System</span>
+              <span className="font-extrabold tracking-wide text-xl gradient-text-primary block leading-tight">UwaisApps</span>
+              <span className="text-[10px] text-slate-500 font-semibold uppercase tracking-wider block">Billing ISP System</span>
             </div>
           </div>
           <button lg-only="true" onClick={() => setIsOpen(false)} className="lg:hidden p-1 rounded-lg hover:bg-slate-800">
