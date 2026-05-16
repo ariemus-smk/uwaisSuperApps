@@ -12,6 +12,7 @@ const CustomMap = ({
   searchCoords,
   olts = [],
   odps = [],
+  subscriptions = [],
   focusCoords = null,
   loading = false
 }) => {
@@ -240,17 +241,60 @@ const CustomMap = ({
       });
     });
 
+    // 3. ADD PPPoE SUBSCRIPTION MARKERS & DROP CABLES
+    if (subscriptions && subscriptions.length > 0) {
+      subscriptions.forEach(sub => {
+        if (!sub.install_latitude || !sub.install_longitude || !sub.odp_id) return;
+        
+        // Find parent ODP
+        const parentOdp = odps.find(o => o.id === sub.odp_id);
+        if (!parentOdp || !parentOdp.latitude || !parentOdp.longitude) return;
+
+        // Draw drop cable from ODP to Customer (Subscription)
+        L.polyline([[parentOdp.latitude, parentOdp.longitude], [sub.install_latitude, sub.install_longitude]], {
+          color: sub.status === 'Active' ? '#10b981' : '#f43f5e',
+          weight: 1,
+          dashArray: '2, 4',
+          opacity: 0.5
+        }).addTo(linesLayerRef.current);
+
+        // Subscription marker (House/User icon)
+        const subColor = sub.status === 'Active' ? 'emerald' : 'rose';
+        const subIcon = L.divIcon({
+          html: `
+            <div class="flex flex-col items-center justify-center relative hover:scale-110 transition-transform cursor-pointer">
+              <div class="h-3 w-3 bg-${subColor}-500 border border-${subColor}-300 rounded-full flex items-center justify-center shadow-lg"></div>
+              <span class="text-[7px] font-bold bg-slate-950 border border-slate-800 text-${subColor}-400 px-1 rounded mt-0.5 whitespace-nowrap">${sub.pppoe_username}</span>
+            </div>
+          `,
+          className: 'custom-sub-icon',
+          iconSize: [20, 20],
+          iconAnchor: [10, 10]
+        });
+
+        const subMarker = L.marker([sub.install_latitude, sub.install_longitude], { icon: subIcon }).addTo(markersLayerRef.current);
+        subMarker.bindTooltip(`
+          <div class="text-xs">
+            <strong>${sub.customer_name}</strong><br/>
+            PPPoE: ${sub.pppoe_username}<br/>
+            ODP: ${parentOdp.name} (Port ${sub.odp_port})<br/>
+            Status: ${sub.status}
+          </div>
+        `);
+      });
+    }
+
     // Auto select first ODP as default active
     if (odps.length > 0 && !activeOdp) {
       setActiveOdp(odps[0]);
     }
-  }, [olts, odps]);
+  }, [olts, odps, subscriptions]);
 
   // Sync searched / queried coordinates (CRM / Registration form)
   useEffect(() => {
     if (searchCoords && mapInstanceRef.current) {
       const latLng = [searchCoords.lat, searchCoords.lng];
-      mapInstanceRef.current.setView(latLng, 15);
+      mapInstanceRef.current.panTo(latLng);
       setTargetPos(searchCoords);
 
       // Update marker and circle positions
@@ -396,25 +440,33 @@ const CustomMap = ({
             {activeOdp ? (
               Array.from({ length: activeOdp.total_ports || 8 }, (_, i) => {
                 const portNum = i + 1;
-                const usedPortsCount = activeOdp.used_ports || 0;
-                // Since individual port mappings are simulated from counts in current DB model:
-                const isActive = portNum <= usedPortsCount;
+                
+                // Cek apakah port ini dipakai oleh subscription di database
+                const subscriber = subscriptions.find(s => s.odp_id === activeOdp.id && s.odp_port === portNum);
+                const isActive = !!subscriber;
                 const isSelected = selectedPort === portNum;
 
                 let colorClass = 'bg-slate-950 border-slate-800 hover:border-brand-500 text-slate-400';
-                if (isActive) colorClass = 'bg-slate-800/80 border-indigo-500/30 text-indigo-400 cursor-not-allowed opacity-60';
+                if (isActive) colorClass = 'bg-slate-800/80 border-rose-500/30 text-rose-400 cursor-not-allowed opacity-60';
                 if (isSelected) colorClass = 'bg-brand-500 border-brand-300 text-white font-black filter drop-shadow-[0_0_6px_rgba(139,92,246,0.6)] scale-105';
 
                 return (
-                  <button
-                    key={portNum}
-                    disabled={isActive}
-                    onClick={() => handlePortClick(portNum, activeOdp)}
-                    className={`py-2 px-1 rounded-lg border text-center text-[10px] font-bold transition-all ${colorClass}`}
-                    title={isActive ? 'Port Terpakai' : `Port ${portNum} Tersedia`}
-                  >
-                    P-{portNum}
-                  </button>
+                  <div key={portNum} className="relative group">
+                    <button
+                      disabled={isActive}
+                      onClick={() => handlePortClick(portNum, activeOdp)}
+                      className={`w-full py-2 px-1 rounded-lg border text-center text-[10px] font-bold transition-all ${colorClass}`}
+                      title={isActive ? `Terpakai: ${subscriber.customer_name || subscriber.pppoe_username}` : `Port ${portNum} Tersedia`}
+                    >
+                      P-{portNum}
+                    </button>
+                    {isActive && (
+                      <div className="absolute opacity-0 group-hover:opacity-100 transition-opacity z-[100] bottom-full left-1/2 -translate-x-1/2 mb-1 w-max max-w-[120px] bg-slate-900 border border-slate-700 text-[9px] text-slate-300 p-1.5 rounded shadow-xl text-center pointer-events-none">
+                        <span className="font-bold text-rose-400 block mb-0.5 truncate">{subscriber.pppoe_username}</span>
+                        <span className="truncate block">{subscriber.customer_name}</span>
+                      </div>
+                    )}
+                  </div>
                 );
               })
             ) : (

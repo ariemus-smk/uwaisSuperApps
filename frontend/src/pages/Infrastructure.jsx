@@ -23,6 +23,7 @@ const Infrastructure = () => {
   const [olts, setOlts] = useState([]);
   const [odps, setOdps] = useState([]);
   const [branches, setBranches] = useState([]);
+  const [subscriptions, setSubscriptions] = useState([]);
 
   // Modals state
   const [isOltModalOpen, setIsOltModalOpen] = useState(false);
@@ -72,15 +73,16 @@ const Infrastructure = () => {
 
   const [opDefaultBranchId, setOpDefaultBranchId] = useState('');
 
-  // Fetch OLT, ODP, and Branches lists
+  // Fetch OLT, ODP, Subscriptions and Branches lists
   const fetchInventory = async () => {
     setListLoading(true);
     setErrorMessage('');
     try {
-      const [oltRes, odpRes, branchRes] = await Promise.all([
+      const [oltRes, odpRes, branchRes, subRes] = await Promise.all([
         axios.get('/api/infrastructure/olts'),
         axios.get('/api/infrastructure/odps'),
-        axios.get('/api/branches').catch(() => null)
+        axios.get('/api/branches').catch(() => null),
+        axios.get('/api/subscriptions?limit=1000').catch(() => null)
       ]);
 
       if (oltRes.data && oltRes.data.status === 'success') {
@@ -88,6 +90,11 @@ const Infrastructure = () => {
       }
       if (odpRes.data && odpRes.data.status === 'success') {
         setOdps(odpRes.data.data || []);
+      }
+      if (subRes && subRes.data && subRes.data.status === 'success') {
+        // Extract array from paginated response
+        const subsArray = subRes.data.data?.subscriptions || subRes.data.data || [];
+        setSubscriptions(subsArray);
       }
       if (branchRes && branchRes.data && branchRes.data.status === 'success') {
         const branchData = branchRes.data.data || [];
@@ -439,6 +446,7 @@ const Infrastructure = () => {
             searchCoords={searchCoords} 
             olts={olts} 
             odps={odps} 
+            subscriptions={subscriptions}
             focusCoords={mapFocus}
             loading={listLoading}
           />

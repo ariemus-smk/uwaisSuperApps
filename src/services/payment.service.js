@@ -100,8 +100,8 @@ async function processPayment(invoiceId, paymentData) {
     payment_method: paymentData.method,
   });
 
-  // Check if customer is in Isolir status and trigger unisolir
-  await triggerUnisolirIfNeeded(invoice);
+  // Check customer status and trigger appropriate post-payment actions (CoA, Activation, Unisolir)
+  await triggerPostPaymentActions(invoice, paymentData);
 
   // Queue payment confirmation notification (Requirement 8.4)
   try {
@@ -216,8 +216,8 @@ async function processTripayCallback(callbackData, signature) {
         payment_method: payment.method || PAYMENT_METHOD.VA,
       });
 
-      // Trigger unisolir if needed
-      await triggerUnisolirIfNeeded(invoice);
+      // Trigger post-payment actions (CoA, Activation, Unisolir)
+      await triggerPostPaymentActions(invoice, { processed_by: null });
     }
 
     return { message: 'Payment processed successfully.', payment_id: payment.id };
@@ -256,42 +256,88 @@ async function getPaymentsByInvoice(invoiceId) {
 }
 
 /**
- * Check if the customer associated with an invoice is in Isolir status,
- * and if so, trigger the unisolir process (restore service).
- *
- * Per Requirement 8.4: When an invoice is marked LUNAS and the customer
- * status is Isolir, automatically trigger a CoA request to the NAS to
- * remove the customer from the isolir Address_List and restore service.
+ * Perform post-payment actions based on customer lifecycle status.
+ * - ISOLIR: trigger unisolir process (restore service)
+ * - INSTALASI: trigger full activation process
+ * - AKTIF: send CoA to refresh the session parameters (e.g. rate limit)
  *
  * @param {object} invoice - Invoice record
+ * @param {object} paymentData - Payment data for actor attribution
  * @returns {Promise<void>}
  */
-async function triggerUnisolirIfNeeded(invoice) {
+async function triggerPostPaymentActions(invoice, paymentData) {
   try {
     // Get the customer for this invoice
     const customer = await customerModel.findById(invoice.customer_id);
     if (!customer) return;
 
-    // Only trigger unisolir if customer is currently in Isolir status
-    if (customer.lifecycle_status !== CUSTOMER_STATUS.ISOLIR) return;
-
     // Get the subscription to find NAS details
-    const subscription = await subscriptionModel.findById(invoice.subscription_id);
+    const subscriptionModelWithDetails = require('../models/subscription.model');
+    const subscription = await subscriptionModelWithDetails.findByIdWithDetails(invoice.subscription_id);
     if (!subscription) return;
 
-    // Update customer status from Isolir to Aktif
-    // Use a system actor ID (0 or null) for automated transitions
-    await customerModel.updateStatus(customer.id, CUSTOMER_STATUS.AKTIF, 0);
+    const { SUBSCRIPTION_STATUS } = require('../utils/constants');
 
-    // Note: The actual CoA request to remove from isolir Address_List
-    // will be handled by the CoA service (task 13.2) when it's implemented.
-    // For now, we log the intent and the customer status is updated.
-    console.log(
-      `[Payment] Unisolir triggered for customer ${customer.id}, subscription ${subscription.id}, NAS ${subscription.nas_id}`
-    );
+    if (customer.lifecycle_status === CUSTOMER_STATUS.ISOLIR || subscription.status === SUBSCRIPTION_STATUS.SUSPENDED) {
+      // Update customer status from Isolir to Aktif if it's currently Isolir
+      if (customer.lifecycle_status === CUSTOMER_STATUS.ISOLIR) {
+        await customerModel.updateStatus(customer.id, CUSTOMER_STATUS.AKTIF, paymentData.processed_by || 1);
+      }
+
+      // Update subscription status to Active
+      await subscriptionModel.update(subscription.id, {
+        status: SUBSCRIPTION_STATUS.ACTIVE,
+      });
+
+      // Remove Isolir profile from RADIUS
+      const radiusService = require('./radius.service');
+      try {
+        await radiusService.removeIsolirProfile(subscription.pppoe_username);
+      } catch (radErr) {
+        console.error(`[Payment] Error removing isolir profile for ${subscription.pppoe_username}:`, radErr.message);
+      }
+
+      // Call CoA service to unisolir the NAS
+      const coaService = require('./coa.service');
+      try {
+        if (subscription.nas_id) {
+          await coaService.unisolir(subscription.id, subscription.nas_id, subscription.pppoe_username);
+        }
+      } catch (coaErr) {
+        console.error(`[Payment] CoA Unisolir failed for ${subscription.pppoe_username}:`, coaErr.message);
+      }
+      console.log(`[Payment] Unisolir triggered successfully for customer ${customer.id}`);
+
+    } else if (customer.lifecycle_status === CUSTOMER_STATUS.INSTALASI || subscription.status === SUBSCRIPTION_STATUS.PENDING) {
+      const customerService = require('./customer.service');
+      try {
+        await customerService.activateCustomer(subscription.id, { id: paymentData.processed_by || 1 });
+        console.log(`[Payment] Activation triggered successfully for customer ${customer.id}`);
+      } catch (actErr) {
+        console.error(`[Payment] Activation failed for customer ${customer.id}:`, actErr.message);
+      }
+
+    } else if (customer.lifecycle_status === CUSTOMER_STATUS.AKTIF || subscription.status === SUBSCRIPTION_STATUS.ACTIVE) {
+      // General CoA session refresh for already active customers
+      const coaService = require('./coa.service');
+      try {
+        if (subscription.nas_id && subscription.upload_rate_limit && subscription.download_rate_limit) {
+          const rateLimit = `${subscription.upload_rate_limit}k/${subscription.download_rate_limit}k`;
+          await coaService.speedChange(
+            subscription.id,
+            subscription.nas_id,
+            subscription.pppoe_username,
+            rateLimit
+          );
+          console.log(`[Payment] CoA session refresh triggered successfully for customer ${customer.id}`);
+        }
+      } catch (coaErr) {
+        console.error(`[Payment] CoA refresh failed for customer ${customer.id}:`, coaErr.message);
+      }
+    }
   } catch (error) {
-    // Log but don't fail the payment if unisolir fails
-    console.error('[Payment] Error triggering unisolir:', error.message);
+    // Log but don't fail the payment if post-payment actions fail
+    console.error('[Payment] Error triggering post-payment actions:', error.message);
   }
 }
 

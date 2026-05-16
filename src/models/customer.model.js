@@ -57,9 +57,16 @@ async function findAll(filters = {}) {
   }
 
   if (lifecycle_status) {
-    countQuery += ' AND c.lifecycle_status = ?';
-    dataQuery += ' AND c.lifecycle_status = ?';
-    params.push(lifecycle_status);
+    if (Array.isArray(lifecycle_status)) {
+      const placeholders = lifecycle_status.map(() => '?').join(', ');
+      countQuery += ` AND c.lifecycle_status IN (${placeholders})`;
+      dataQuery += ` AND c.lifecycle_status IN (${placeholders})`;
+      params.push(...lifecycle_status);
+    } else {
+      countQuery += ' AND c.lifecycle_status = ?';
+      dataQuery += ' AND c.lifecycle_status = ?';
+      params.push(lifecycle_status);
+    }
   }
 
   if (search) {

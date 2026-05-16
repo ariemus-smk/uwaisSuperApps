@@ -122,6 +122,19 @@ async function setIsolirProfile(username) {
     });
   }
 
+  // Check if address list attribute exists
+  const existingAddressList = await radreplyModel.findByUsernameAndAttribute(username, 'Mikrotik-Address-List');
+  if (existingAddressList) {
+    await radreplyModel.update(existingAddressList.id, { value: 'ISOLIR' });
+  } else {
+    await radreplyModel.create({
+      username,
+      attribute: 'Mikrotik-Address-List',
+      op: '=',
+      value: 'ISOLIR',
+    });
+  }
+
   // Add to isolir group if not already
   let groupRecord;
   const existingGroup = await raduserGroupModel.findByUsernameAndGroup(username, 'isolir');
@@ -212,6 +225,12 @@ async function removeIsolirProfile(username) {
   if (existingReply) {
     await radreplyModel.deleteById(existingReply.id);
     replyRemoved = true;
+  }
+
+  // Remove address list attribute
+  const existingAddressList = await radreplyModel.findByUsernameAndAttribute(username, 'Mikrotik-Address-List');
+  if (existingAddressList && existingAddressList.value === 'ISOLIR') {
+    await radreplyModel.deleteById(existingAddressList.id);
   }
 
   // Remove from isolir group

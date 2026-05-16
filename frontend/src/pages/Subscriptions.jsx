@@ -4,7 +4,7 @@ import CustomMap from '../components/CustomMap';
 import StatusBadge from '../components/StatusBadge';
 import axios from 'axios';
 import { 
-  Wifi, HelpCircle, HardDrive, Key, Plus, CheckCircle, AlertCircle, RefreshCw, Send, Radio, Trash2, Zap
+  Wifi, HelpCircle, HardDrive, Key, Plus, CheckCircle, AlertCircle, RefreshCw, Send, Radio, Trash2, Zap, Search
 } from 'lucide-react';
 
 const Subscriptions = () => {
@@ -32,6 +32,9 @@ const Subscriptions = () => {
   const [nasList, setNasList] = useState([]);
   const [olts, setOlts] = useState([]);
   const [odps, setOdps] = useState([]);
+  const [customerSearch, setCustomerSearch] = useState('');
+  const [isSearchingCustomers, setIsSearchingCustomers] = useState(false);
+  const [selectedCustName, setSelectedCustName] = useState('');
 
   // Generated results simulation
   const [generatedUser, setGeneratedUser] = useState('');
@@ -69,26 +72,47 @@ const Subscriptions = () => {
     fetchSubscriptions();
   }, []);
 
+  const fetchCustomers = async (search = '') => {
+    setIsSearchingCustomers(true);
+    try {
+      const response = await axios.get('/api/customers', { 
+        params: { 
+          'lifecycle_status[]': ['Instalasi', 'Aktif'], 
+          search,
+          limit: 50 
+        } 
+      });
+      if (response.data?.status === 'success') {
+        const arr = response.data.data?.customers || response.data.data || [];
+        setCustomersList(arr);
+        if (arr.length > 0 && !selectedCustId) {
+          const first = arr[0];
+          setSelectedCustId(first.id);
+          setSelectedCustName(first.full_name);
+          if (first.latitude && first.longitude) {
+            setCustomerCoords({ lat: parseFloat(first.latitude), lng: parseFloat(first.longitude) });
+          }
+        }
+      }
+    } catch (err) {
+      console.error('Failed to fetch customers', err);
+    } finally {
+      setIsSearchingCustomers(false);
+    }
+  };
+
   useEffect(() => {
     if (showWizard) {
       const loadWizardData = async () => {
         try {
-          const [custRes, packRes, nasRes] = await Promise.all([
-            axios.get('/api/customers', { params: { lifecycle_status: 'Instalasi', limit: 100 } }),
+          // Fetch initial customers (first 50)
+          fetchCustomers();
+
+          const [packRes, nasRes] = await Promise.all([
             axios.get('/api/packages'),
             axios.get('/api/nas', { params: { limit: 100 } })
           ]);
 
-          if (custRes.data?.status === 'success') {
-            const arr = custRes.data.data?.customers || custRes.data.data || [];
-            setCustomersList(arr);
-            if (arr.length > 0) {
-              setSelectedCustId(arr[0].id);
-              if (arr[0].latitude && arr[0].longitude) {
-                setCustomerCoords({ lat: parseFloat(arr[0].latitude), lng: parseFloat(arr[0].longitude) });
-              }
-            }
-          }
           if (packRes.data?.status === 'success') {
             const arr = packRes.data.data?.packages || packRes.data.data || [];
             setPackagesList(arr);
@@ -114,6 +138,18 @@ const Subscriptions = () => {
       loadWizardData();
     }
   }, [showWizard]);
+
+  // Debounced customer search
+  useEffect(() => {
+    if (showWizard && customerSearch.length >= 1) {
+      const timeoutId = setTimeout(() => {
+        fetchCustomers(customerSearch);
+      }, 300);
+      return () => clearTimeout(timeoutId);
+    } else if (showWizard && customerSearch.length === 0) {
+      fetchCustomers();
+    }
+  }, [customerSearch, showWizard]);
 
   const handleMapSelection = (latLng) => {
     setCustomerCoords(latLng);
@@ -264,24 +300,57 @@ const Subscriptions = () => {
             <div className="space-y-4">
               <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                 <div className="space-y-1.5">
-                  <label className="text-xs font-bold text-slate-400">Pilih Calon Pelanggan (Status Instalasi)</label>
-                  <select 
-                    value={selectedCustId} 
-                    onChange={(e) => {
-                      const id = e.target.value;
-                      setSelectedCustId(id);
-                      const cust = customersList.find(c => c.id.toString() === id.toString());
-                      if (cust && cust.latitude && cust.longitude) {
-                        setCustomerCoords({ lat: parseFloat(cust.latitude), lng: parseFloat(cust.longitude) });
-                      }
-                    }}
-                    className="w-full input-field text-xs bg-slate-950"
-                  >
-                    {customersList.length === 0 && <option value="">-- Tidak ada pelanggan Instalasi --</option>}
-                    {customersList.map(c => (
-                      <option key={c.id} value={c.id}>{c.full_name} ({c.code || `ID:${c.id}`})</option>
-                    ))}
-                  </select>
+                  <label className="text-xs font-bold text-slate-400">Cari & Pilih Pelanggan (Instalasi / Aktif)</label>
+                  <div className="border border-slate-800 rounded-xl bg-slate-950 overflow-hidden focus-within:border-brand-500/50 transition-colors">
+                    {/* Search Input Part */}
+                    <div className="relative border-b border-slate-800/60">
+                      <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                        {isSearchingCustomers ? (
+                          <RefreshCw className="h-3.5 w-3.5 animate-spin text-brand-400" />
+                        ) : (
+                          <Search className="h-3.5 w-3.5 text-slate-500" />
+                        )}
+                      </div>
+                      <input
+                        type="text"
+                        placeholder="Ketik nama atau KTP untuk mencari..."
+                        value={customerSearch}
+                        onChange={(e) => setCustomerSearch(e.target.value)}
+                        className="w-full bg-transparent border-0 text-xs pl-9 pr-3 py-2.5 text-slate-200 placeholder:text-slate-600 focus:ring-0"
+                      />
+                    </div>
+                    {/* Select Dropdown Part */}
+                    <select 
+                      value={selectedCustId} 
+                      onChange={(e) => {
+                        const id = e.target.value;
+                        setSelectedCustId(id);
+                        const cust = customersList.find(c => c.id.toString() === id.toString());
+                        if (cust) {
+                          setSelectedCustName(cust.full_name);
+                          if (cust.latitude && cust.longitude) {
+                            setCustomerCoords({ lat: parseFloat(cust.latitude), lng: parseFloat(cust.longitude) });
+                          }
+                        }
+                      }}
+                      className="w-full bg-slate-900/50 border-0 text-xs py-2.5 px-3 text-slate-300 focus:ring-0 cursor-pointer"
+                    >
+                      {customersList.length === 0 && !isSearchingCustomers && (
+                        <option value="">-- Tidak ada pelanggan ditemukan --</option>
+                      )}
+                      {customersList.length === 0 && isSearchingCustomers && (
+                        <option value="">Mencari data...</option>
+                      )}
+                      {customersList.map(c => (
+                        <option key={c.id} value={c.id}>
+                          [{c.lifecycle_status}] {c.full_name} - {c.code || `ID:${c.id}`}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                  <p className="text-[10px] text-slate-500 mt-1 italic">
+                    * Pelanggan Aktif bisa menambah layanan PPPoE di lokasi baru.
+                  </p>
                 </div>
 
                 <div className="space-y-1.5">
@@ -336,6 +405,7 @@ const Subscriptions = () => {
                     onPortSelect={handleOdpPortSelect}
                     olts={olts}
                     odps={odps}
+                    subscriptions={subscriptions}
                     searchCoords={customerCoords}
                   />
                 </div>

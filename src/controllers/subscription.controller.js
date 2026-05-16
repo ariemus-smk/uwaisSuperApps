@@ -92,7 +92,8 @@ async function update(req, res) {
 async function activate(req, res) {
   try {
     const { id } = req.params;
-    const subscription = await subscriptionService.activate(Number(id));
+    const actorId = req.user ? req.user.id : 1;
+    const subscription = await subscriptionService.activate(Number(id), actorId);
 
     return success(res, subscription, 'Subscription activated successfully.');
   } catch (err) {

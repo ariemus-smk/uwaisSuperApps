@@ -80,15 +80,29 @@ const idParamSchema = Joi.object({
 });
 
 const listQuerySchema = Joi.object({
-  lifecycle_status: Joi.string()
-    .valid(
+  lifecycle_status: Joi.alternatives().try(
+    Joi.string().valid(
       CUSTOMER_STATUS.PROSPEK,
       CUSTOMER_STATUS.INSTALASI,
       CUSTOMER_STATUS.AKTIF,
       CUSTOMER_STATUS.ISOLIR,
       CUSTOMER_STATUS.TERMINATED
-    )
-    .optional(),
+    ),
+    Joi.array().items(Joi.string().valid(
+      CUSTOMER_STATUS.PROSPEK,
+      CUSTOMER_STATUS.INSTALASI,
+      CUSTOMER_STATUS.AKTIF,
+      CUSTOMER_STATUS.ISOLIR,
+      CUSTOMER_STATUS.TERMINATED
+    ))
+  ).optional(),
+  'lifecycle_status[]': Joi.array().items(Joi.string().valid(
+    CUSTOMER_STATUS.PROSPEK,
+    CUSTOMER_STATUS.INSTALASI,
+    CUSTOMER_STATUS.AKTIF,
+    CUSTOMER_STATUS.ISOLIR,
+    CUSTOMER_STATUS.TERMINATED
+  )).optional(),
   search: Joi.string().trim().max(100).optional(),
   page: Joi.number().integer().positive().optional(),
   limit: Joi.number().integer().positive().max(100).optional(),

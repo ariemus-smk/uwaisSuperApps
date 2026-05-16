@@ -57,7 +57,7 @@ function generateNasScript(nasConfig) {
   sections.push(generateHotspotConfig(hotspotInterface));
 
   // Auto-Isolir Address_List Rules
-  sections.push(generateIsolirRules(isolirRedirectUrl));
+  sections.push(generateIsolirRules(radiusServer));
 
   // Footer
   sections.push(generateFooter());
@@ -222,41 +222,32 @@ add name=uwais-user-profile \\
 /**
  * Generate auto-isolir Address_List firewall rules.
  */
-function generateIsolirRules(isolirRedirectUrl) {
+function generateIsolirRules(radiusServer) {
   return `# ============================================================
 # SECTION 5: Auto-Isolir Address_List Rules
 # ============================================================
 
-# --- Address List for Isolated Customers ---
-# Customers added to this list will be redirected to isolir page
-/ip firewall address-list
-add list=isolir comment="Isolir Address List - managed by UwaisApps"
-
-# --- Firewall Filter: Block isolated customers ---
-/ip firewall filter
-add chain=forward src-address-list=isolir action=drop \\
-    comment="UwaisApps: Block isolir customers forward traffic" \\
-    place-before=0
-
-# --- Firewall NAT: Redirect isolated customers to warning page ---
-/ip firewall nat
-add chain=dstnat src-address-list=isolir dst-port=80 protocol=tcp \\
-    action=dst-nat to-addresses=10.10.0.1 to-ports=8080 \\
-    comment="UwaisApps: Redirect isolir HTTP to warning page"
-
-add chain=dstnat src-address-list=isolir dst-port=443 protocol=tcp \\
-    action=dst-nat to-addresses=10.10.0.1 to-ports=8443 \\
-    comment="UwaisApps: Redirect isolir HTTPS to warning page"
-
 # --- Walled Garden for Isolir Page ---
 /ip firewall filter
-add chain=forward src-address-list=isolir dst-address=10.10.0.1 action=accept \\
+add chain=forward src-address-list=ISOLIR dst-address=${radiusServer} action=accept \\
     comment="UwaisApps: Allow isolir page access" \\
     place-before=0
 
+# --- Firewall Filter: Block isolated customers ---
+/ip firewall filter
+add chain=forward src-address-list=ISOLIR action=drop \\
+    comment="UwaisApps: Block isolir customers forward traffic" \\
+    place-before=1
+
+# --- Firewall NAT: Redirect isolated customers to warning page ---
+/ip firewall nat
+add action=dst-nat chain=dstnat dst-port=80,443 protocol=tcp src-address-list=ISOLIR \\
+    to-addresses=${radiusServer} to-ports=3500 \\
+    comment="UwaisApps: Redirect isolir HTTP/HTTPS to warning page"
+
 # --- DNS Redirect for Isolated Customers ---
 /ip firewall nat
-add chain=dstnat src-address-list=isolir dst-port=53 protocol=udp \\
+add chain=dstnat src-address-list=ISOLIR dst-port=53 protocol=udp \\
     action=redirect to-ports=53 \\
     comment="UwaisApps: Redirect isolir DNS"`;
 }

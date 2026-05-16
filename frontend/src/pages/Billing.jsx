@@ -85,32 +85,52 @@ const Billing = () => {
     }
   };
 
-  const handleMitraCashPayment = async (inv) => {
-    const confirmPay = window.confirm(`Bayar tagihan ini secara tunai melalui saldo Anda? Saldo Anda akan dipotong sebesar ${inv.amount.toLocaleString('id-ID')}`);
+  const handleCashPayment = async (inv) => {
+    let confirmMsg = `Bayar tagihan ini secara tunai?`;
+    if (['Mitra', 'Merchant'].includes(currentRole)) {
+      confirmMsg = `Bayar tagihan ini secara tunai melalui saldo Anda? Saldo Anda akan dipotong sebesar Rp ${(inv.total_amount !== undefined ? Number(inv.total_amount) : 0).toLocaleString('id-ID')}`;
+    } else {
+      confirmMsg = `Terima pembayaran tunai sebesar Rp ${(inv.total_amount !== undefined ? Number(inv.total_amount) : 0).toLocaleString('id-ID')}? Status tagihan akan langsung menjadi Lunas.`;
+    }
+
+    const confirmPay = window.confirm(confirmMsg);
     if (confirmPay) {
       try {
-        // Call real Mitra Payment API: POST /api/payments/mitra
-        const response = await axios.post('/api/payments/mitra', { invoice_id: inv.id });
+        let endpoint = '';
+        if (currentRole === 'Mitra') {
+           endpoint = '/api/payments/mitra';
+        } else if (currentRole === 'Merchant') {
+           endpoint = '/api/payments/merchant';
+        } else if (['Superadmin', 'Admin'].includes(currentRole)) {
+           endpoint = '/api/payments/cash';
+        } else {
+           alert('Role tidak diizinkan untuk menerima pembayaran tunai.');
+           return;
+        }
+
+        const response = await axios.post(endpoint, { invoice_id: inv.id });
         if (response.data && response.data.status === 'success') {
           await fetchInvoices();
-          alert('Pembayaran tunai via Mitra sukses! Sesi PPPoE pelanggan dibuka otomatis.');
+          alert('Pembayaran tunai sukses! Sesi PPPoE pelanggan akan dibuka otomatis jika dalam masa isolir.');
         } else {
           throw new Error(response.data?.message || "Pembayaran ditolak");
         }
       } catch (err) {
-        console.error("Mitra payment endpoint failed:", err);
+        console.error("Cash payment endpoint failed:", err);
         alert(`Pembayaran gagal: ${err.response?.data?.message || err.message}`);
       }
     }
   };
 
   const filteredInvoices = invoices.filter(inv => {
-    const numVal = inv.number || '';
+    const numVal = inv.invoice_number || '';
     const nameVal = inv.customer_name || '';
     const statusVal = inv.status || '';
+    const accountVal = inv.pppoe_username || '';
 
     const matchesSearch = numVal.toLowerCase().includes(search.toLowerCase()) || 
-                          nameVal.toLowerCase().includes(search.toLowerCase());
+                          nameVal.toLowerCase().includes(search.toLowerCase()) ||
+                          accountVal.toLowerCase().includes(search.toLowerCase());
     const matchesStatus = filterStatus === 'ALL' || statusVal.toUpperCase() === filterStatus.toUpperCase();
     return matchesSearch && matchesStatus;
   });
@@ -176,6 +196,8 @@ const Billing = () => {
               <tr className="border-b border-slate-800 text-slate-500 uppercase tracking-wider bg-slate-950/40">
                 <th className="py-4 px-6 font-semibold">No Invoice</th>
                 <th className="py-4 px-6 font-semibold">Nama Pelanggan</th>
+                <th className="py-4 px-6 font-semibold">Layanan</th>
+                <th className="py-4 px-6 font-semibold">Akun</th>
                 <th className="py-4 px-6 font-semibold">Periode Tagihan</th>
                 <th className="py-4 px-6 font-semibold">Nominal Total (+PPN)</th>
                 <th className="py-4 px-6 font-semibold">Metode Bayar</th>
@@ -186,11 +208,18 @@ const Billing = () => {
             <tbody className="divide-y divide-slate-800/50">
               {filteredInvoices.map((inv) => (
                 <tr key={inv.id} className="hover:bg-slate-800/15 transition-colors">
-                  <td className="py-4 px-6 font-mono font-bold text-brand-400">{inv.number || `INV-${inv.id}`}</td>
+                  <td className="py-4 px-6 font-mono font-bold text-brand-400">{inv.invoice_number || `INV-${inv.id}`}</td>
                   <td className="py-4 px-6 font-bold text-slate-200">{inv.customer_name || 'Active Customer'}</td>
+                  <td className="py-4 px-6">
+                    <span className={`px-2 py-0.5 rounded text-[10px] font-bold ${inv.service_type === 'Hotspot' ? 'bg-orange-500/10 text-orange-400' : 'bg-brand-500/10 text-brand-400'}`}>
+                      {inv.service_type || 'PPPoE'}
+                    </span>
+                    <div className="text-[10px] text-slate-500 font-medium">{inv.package_name}</div>
+                  </td>
+                  <td className="py-4 px-6 font-mono text-[10px] text-slate-400">{inv.pppoe_username || '---'}</td>
                   <td className="py-4 px-6 font-medium text-slate-400">{inv.billing_period || '2026-05'}</td>
-                  <td className="py-4 px-6 font-mono font-bold text-slate-300">Rp {(inv.amount || 0).toLocaleString('id-ID')}</td>
-                  <td className="py-4 px-6 text-slate-500 font-semibold">{inv.method || '---'}</td>
+                  <td className="py-4 px-6 font-mono font-bold text-slate-300">Rp {(inv.total_amount !== undefined ? Number(inv.total_amount) : 0).toLocaleString('id-ID')}</td>
+                  <td className="py-4 px-6 text-slate-500 font-semibold">{inv.payment_method || '---'}</td>
                   <td className="py-4 px-6 text-center">
                     <StatusBadge status={inv.status || 'UNPAID'} />
                   </td>
@@ -205,10 +234,10 @@ const Billing = () => {
                           Checkout TRIPAY
                         </button>
                         
-                        {/* Mitra cash payment shortcut */}
-                        {currentRole === 'Mitra' && (
+                        {/* Cash payment shortcut */}
+                        {['Superadmin', 'Admin', 'Merchant', 'Mitra'].includes(currentRole) && (
                           <button 
-                            onClick={() => handleMitraCashPayment(inv)}
+                            onClick={() => handleCashPayment(inv)}
                             className="bg-emerald-600 hover:bg-emerald-500 text-white font-bold px-3 py-1.5 rounded-lg text-[10px] transition-colors"
                           >
                             Terima Tunai (Cash)
@@ -240,7 +269,7 @@ const Billing = () => {
                 </div>
                 <div>
                   <h4 className="text-base font-bold text-slate-200">Pembayaran Sukses Terverifikasi!</h4>
-                  <p className="text-xs text-slate-400 mt-1">Invoice <strong className="font-mono text-brand-400">{selectedInvoice.number}</strong> lunas. Sistem otomatis mengirim un-isolir ke router.</p>
+                  <p className="text-xs text-slate-400 mt-1">Invoice <strong className="font-mono text-brand-400">{selectedInvoice.invoice_number}</strong> lunas. Sistem otomatis mengirim un-isolir ke router.</p>
                 </div>
                 <div className="bg-slate-950/80 p-3 rounded-xl text-left border border-slate-800 text-[10px] text-slate-500 font-mono space-y-1">
                   <span className="block"><strong className="text-slate-300">Method:</strong> TRIPAY {paymentMethod}</span>
@@ -257,9 +286,11 @@ const Billing = () => {
             ) : (
               <div className="space-y-4">
                 <div className="bg-slate-950 border border-slate-800 p-4 rounded-xl space-y-1.5 text-xs">
-                  <div className="flex justify-between"><span className="text-slate-500 font-semibold">No Tagihan</span><span className="text-slate-300 font-mono font-bold">{selectedInvoice.number}</span></div>
+                  <div className="flex justify-between"><span className="text-slate-500 font-semibold">No Tagihan</span><span className="text-slate-300 font-mono font-bold">{selectedInvoice.invoice_number}</span></div>
                   <div className="flex justify-between"><span className="text-slate-500 font-semibold">Pelanggan</span><span className="text-slate-300 font-bold">{selectedInvoice.customer_name}</span></div>
-                  <div className="flex justify-between"><span className="text-slate-500 font-semibold">Total Invoice (+PPN)</span><span className="text-brand-400 font-extrabold">Rp {selectedInvoice.amount.toLocaleString('id-ID')}</span></div>
+                  <div className="flex justify-between"><span className="text-slate-500 font-semibold">Layanan</span><span className="text-slate-300 font-bold">{selectedInvoice.service_type || 'PPPoE'} - {selectedInvoice.package_name}</span></div>
+                  <div className="flex justify-between"><span className="text-slate-500 font-semibold">Akun</span><span className="text-slate-300 font-mono">{selectedInvoice.pppoe_username}</span></div>
+                  <div className="flex justify-between"><span className="text-slate-500 font-semibold">Total Invoice (+PPN)</span><span className="text-brand-400 font-extrabold">Rp {(selectedInvoice.total_amount !== undefined ? Number(selectedInvoice.total_amount) : 0).toLocaleString('id-ID')}</span></div>
                 </div>
 
                 <div className="space-y-1.5">
