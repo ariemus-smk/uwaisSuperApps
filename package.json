@@ -9,7 +9,9 @@
     "test": "jest --coverage",
     "lint": "eslint src/",
     "migrate": "node scripts/migrate.js",
-    "seed": "node scripts/seed.js"
+    "seed": "node scripts/seed.js",
+    "seed:regions": "node scripts/seed_regions.js",
+    "seed:infrastructure": "node scripts/seed_infrastructure.js"
   },
   "keywords": [
     "isp",
