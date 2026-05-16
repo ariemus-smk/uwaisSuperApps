@@ -35,9 +35,7 @@ const Login = () => {
         
         {/* Logo/Branding Header */}
         <div className="text-center mb-8">
-          <div className="inline-flex h-14 w-14 bg-gradient-to-tr from-brand-500 via-indigo-600 to-brand-700 rounded-2xl items-center justify-center shadow-2xl shadow-brand-500/25 ring-2 ring-white/10 mb-3">
-            <span className="font-black text-white text-2xl">U</span>
-          </div>
+          <img src="/logo.png" alt="UwaisSuperApps Logo" className="h-16 w-16 mx-auto mb-3 object-contain drop-shadow-2xl" />
           <h1 className="text-3xl font-extrabold tracking-tight text-slate-100 m-0">
             <span className="gradient-text-primary">UwaisSuperApps</span>
           </h1>
